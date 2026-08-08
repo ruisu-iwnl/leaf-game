@@ -27,40 +27,1257 @@
       "$properties": {
         "FilteringEnabled": true
       },
-      "Baseplate": {
+
+      "Ground": {
         "$className": "Part",
         "$properties": {
           "Anchored": true,
-          "Color": [
-            0.38823,
-            0.37254,
-            0.38823
-          ],
-          "Locked": true,
-          "Position": [
-            0,
-            -10,
-            0
-          ],
-          "Size": [
-            512,
-            20,
-            512
-          ]
+          "CFrame": [0, -2, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+          "Color": [0.58, 0.52, 0.24],
+          "Material": "Grass",
+          "Size": [100, 4, 100]
+        }
+      },
+
+      "GroundDetail": {
+        "$className": "Folder",
+
+        "GrassPatches": {
+          "$className": "Folder",
+
+          "GrassPatch1": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [15, 0.06, -18, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.62, 0.55, 0.25],
+              "Material": "Grass",
+              "Shape": "Ball",
+              "Size": [22, 0.1, 20]
+            }
+          },
+
+          "GrassPatch2": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [-18, 0.06, 28, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.42, 0.4, 0.16],
+              "Material": "Grass",
+              "Shape": "Ball",
+              "Size": [18, 0.1, 16]
+            }
+          }
+        },
+
+        "Pebbles": {
+          "$className": "Folder",
+
+          "Pebble1": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [12, 0.2, -3, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.55, 0.55, 0.55],
+              "Material": "Pebble",
+              "Shape": "Ball",
+              "Size": [0.5, 0.4, 0.5]
+            }
+          },
+
+          "Pebble2": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [-25, 0.2, 10, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.55, 0.55, 0.55],
+              "Material": "Pebble",
+              "Shape": "Ball",
+              "Size": [0.4, 0.3, 0.4]
+            }
+          },
+
+          "Pebble3": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [35, 0.2, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.55, 0.55, 0.55],
+              "Material": "Pebble",
+              "Shape": "Ball",
+              "Size": [0.45, 0.35, 0.45]
+            }
+          },
+
+          "Pebble4": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [-12, 0.2, 32, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.55, 0.55, 0.55],
+              "Material": "Pebble",
+              "Shape": "Ball",
+              "Size": [0.5, 0.4, 0.5]
+            }
+          },
+
+          "Pebble5": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [5, 0.2, 25, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.55, 0.55, 0.55],
+              "Material": "Pebble",
+              "Shape": "Ball",
+              "Size": [0.4, 0.3, 0.4]
+            }
+          }
+        }
+      },
+
+      "Boundary": {
+        "$className": "Folder",
+
+        "HedgeNorth": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [0, 2.5, 49, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.25, 0.32, 0.12],
+            "Material": "LeafyGrass",
+            "Size": [104, 5, 2]
+          }
+        },
+
+        "HedgeSouth": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [0, 2.5, -49, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.25, 0.32, 0.12],
+            "Material": "LeafyGrass",
+            "Size": [104, 5, 2]
+          }
+        },
+
+        "HedgeEast": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [49, 2.5, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.25, 0.32, 0.12],
+            "Material": "LeafyGrass",
+            "Size": [2, 5, 104]
+          }
+        },
+
+        "HedgeWest": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [-49, 2.5, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.25, 0.32, 0.12],
+            "Material": "LeafyGrass",
+            "Size": [2, 5, 104]
+          }
+        },
+
+        "WallNorth": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": true,
+            "CFrame": [0, 50, 49, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Material": "SmoothPlastic",
+            "Size": [104, 100, 2],
+            "Transparency": 1
+          }
+        },
+
+        "WallSouth": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": true,
+            "CFrame": [0, 50, -49, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Material": "SmoothPlastic",
+            "Size": [104, 100, 2],
+            "Transparency": 1
+          }
+        },
+
+        "WallEast": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": true,
+            "CFrame": [49, 50, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Material": "SmoothPlastic",
+            "Size": [2, 100, 104],
+            "Transparency": 1
+          }
+        },
+
+        "WallWest": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": true,
+            "CFrame": [-49, 50, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Material": "SmoothPlastic",
+            "Size": [2, 100, 104],
+            "Transparency": 1
+          }
+        }
+      },
+
+      "House": {
+        "$className": "Model",
+
+        "Body": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [-32, 6, 20, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.92, 0.85, 0.65],
+            "Material": "Concrete",
+            "Size": [18, 12, 16]
+          }
+        },
+
+        "Roof": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [-32, 14, 20, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.15, 0.35, 0.15],
+            "Material": "Slate",
+            "Size": [20, 4, 18]
+          }
+        },
+
+        "Chimney": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [-42, 15, 25, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.5, 0.3, 0.25],
+            "Material": "Brick",
+            "Size": [2, 6, 2]
+          }
+        },
+
+        "Door": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "CFrame": [-32, 2.5, 11.8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.25, 0.15, 0.1],
+            "Material": "WoodPlanks",
+            "Size": [2.5, 5, 0.3]
+          }
+        },
+
+        "WindowLeft": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "CFrame": [-37, 7, 11.8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.6, 0.8, 0.9],
+            "Material": "Glass",
+            "Size": [2.5, 2.5, 0.3]
+          }
+        },
+
+        "WindowRight": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "CFrame": [-27, 7, 11.8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.6, 0.8, 0.9],
+            "Material": "Glass",
+            "Size": [2.5, 2.5, 0.3]
+          }
+        },
+
+        "Sign": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "CFrame": [-32, 9, 11.85, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.95, 0.93, 0.85],
+            "Material": "WoodPlanks",
+            "Size": [6, 2, 0.2]
+          },
+
+          "Text": {
+            "$className": "SurfaceGui",
+            "$properties": {
+              "Face": "Front",
+              "LightInfluence": 0
+            },
+
+            "Label": {
+              "$className": "TextLabel",
+              "$properties": {
+                "BackgroundTransparency": 1,
+                "Font": "SourceSansBold",
+                "Size": {"UDim2": [[1, 0], [1, 0]]},
+                "Text": "House",
+                "TextColor3": [0.15, 0.1, 0.05],
+                "TextScaled": true
+              }
+            }
+          }
+        }
+      },
+
+      "Trees": {
+        "$className": "Folder",
+
+        "Tree1": {
+          "$className": "Model",
+          "Trunk": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [45, 3, -5, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3608, 0.251, 0.2],
+              "Material": "Wood",
+              "Size": [1.5, 6, 1.5]
+            }
+          },
+          "LeavesMain": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [45, 9, -5, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.75, 0.35, 0.12],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [9, 9, 9]
+            }
+          },
+          "LeavesSmall": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [47.5, 8, -3, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.55, 0.2],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [7, 7, 7]
+            }
+          }
+        },
+
+        "Tree2": {
+          "$className": "Model",
+          "Trunk": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-45, 3, -5, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3608, 0.251, 0.2],
+              "Material": "Wood",
+              "Size": [1.5, 6, 1.5]
+            }
+          },
+          "LeavesMain": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-45, 9, -5, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.75, 0.35, 0.12],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [9, 9, 9]
+            }
+          },
+          "LeavesSmall": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-42.5, 8, -3, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.55, 0.2],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [7, 7, 7]
+            }
+          }
+        },
+
+        "Tree3": {
+          "$className": "Model",
+          "Trunk": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [8, 3, 35, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3608, 0.251, 0.2],
+              "Material": "Wood",
+              "Size": [1.5, 6, 1.5]
+            }
+          },
+          "LeavesMain": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [8, 9, 35, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.75, 0.35, 0.12],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [9, 9, 9]
+            }
+          },
+          "LeavesSmall": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [10.5, 8, 33, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.55, 0.2],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [7, 7, 7]
+            }
+          }
+        },
+
+        "Tree4": {
+          "$className": "Model",
+          "Trunk": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-10, 3, -35, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3608, 0.251, 0.2],
+              "Material": "Wood",
+              "Size": [1.5, 6, 1.5]
+            }
+          },
+          "LeavesMain": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-10, 9, -35, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.75, 0.35, 0.12],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [9, 9, 9]
+            }
+          },
+          "LeavesSmall": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-7.5, 8, -33, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.55, 0.2],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [7, 7, 7]
+            }
+          }
+        },
+
+        "Tree5": {
+          "$className": "Model",
+          "Trunk": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [38, 3, -12, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3608, 0.251, 0.2],
+              "Material": "Wood",
+              "Size": [1.5, 6, 1.5]
+            }
+          },
+          "LeavesMain": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [38, 9, -12, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.75, 0.35, 0.12],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [9, 9, 9]
+            }
+          },
+          "LeavesSmall": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [40.5, 8, -10, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.55, 0.2],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [7, 7, 7]
+            }
+          }
+        },
+
+        "Tree6": {
+          "$className": "Model",
+          "Trunk": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [30, 3, 25, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3608, 0.251, 0.2],
+              "Material": "Wood",
+              "Size": [1.5, 6, 1.5]
+            }
+          },
+          "LeavesMain": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [30, 9, 25, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.75, 0.35, 0.12],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [9, 9, 9]
+            }
+          },
+          "LeavesSmall": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [32.5, 8, 27, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.55, 0.2],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [7, 7, 7]
+            }
+          }
+        },
+
+        "Tree7": {
+          "$className": "Model",
+          "Trunk": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-30, 3, -30, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3608, 0.251, 0.2],
+              "Material": "Wood",
+              "Size": [1.5, 6, 1.5]
+            }
+          },
+          "LeavesMain": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-30, 9, -30, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.75, 0.35, 0.12],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [9, 9, 9]
+            }
+          },
+          "LeavesSmall": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-27.5, 8, -28, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.55, 0.2],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [7, 7, 7]
+            }
+          }
+        },
+
+        "Tree8": {
+          "$className": "Model",
+          "Trunk": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [20, 3, -35, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3608, 0.251, 0.2],
+              "Material": "Wood",
+              "Size": [1.5, 6, 1.5]
+            }
+          },
+          "LeavesMain": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [20, 9, -35, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.75, 0.35, 0.12],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [9, 9, 9]
+            }
+          },
+          "LeavesSmall": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [22.5, 8, -33, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.55, 0.2],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [7, 7, 7]
+            }
+          }
+        },
+
+        "Tree9": {
+          "$className": "Model",
+          "Trunk": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-20, 3, 35, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3608, 0.251, 0.2],
+              "Material": "Wood",
+              "Size": [1.5, 6, 1.5]
+            }
+          },
+          "LeavesMain": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-20, 9, 35, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.75, 0.35, 0.12],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [9, 9, 9]
+            }
+          },
+          "LeavesSmall": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-17.5, 8, 33, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.55, 0.2],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [7, 7, 7]
+            }
+          }
+        },
+
+        "Tree10": {
+          "$className": "Model",
+          "Trunk": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-5, 3, 42, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3608, 0.251, 0.2],
+              "Material": "Wood",
+              "Size": [1.5, 6, 1.5]
+            }
+          },
+          "LeavesMain": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-5, 9, 42, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.75, 0.35, 0.12],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [9, 9, 9]
+            }
+          },
+          "LeavesSmall": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-2.5, 8, 40, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.55, 0.2],
+              "Material": "LeafyGrass",
+              "Shape": "Ball",
+              "Size": [7, 7, 7]
+            }
+          }
+        }
+      },
+
+      "Decor": {
+        "$className": "Folder",
+
+        "Bush1": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [-27, 2, 9, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.5, 0.22, 0.12],
+            "Material": "LeafyGrass",
+            "Shape": "Ball",
+            "Size": [3, 3, 3]
+          }
+        },
+
+        "FlowerBedHouse": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "CFrame": [-37, 0.3, 9, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.82, 0.5, 0.15],
+            "Size": [3, 0.6, 3]
+          }
+        },
+
+        "Mailbox": {
+          "$className": "Model",
+
+          "Post": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-36, 2, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.3, 0.3, 0.3],
+              "Material": "Metal",
+              "Size": [0.8, 4, 0.8]
+            }
+          },
+
+          "Box": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-36, 4.2, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.8, 0.1, 0.1],
+              "Material": "SmoothPlastic",
+              "Size": [1.5, 1, 2]
+            }
+          }
+        }
+      },
+
+      "SpawnPoint": {
+        "$className": "SpawnLocation",
+        "$properties": {
+          "Anchored": true,
+          "CFrame": [0, 0.5, -40, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+          "Neutral": true,
+          "Size": [6, 1, 6]
+        }
+      },
+
+      "LeafSpawnArea": {
+        "$className": "Part",
+        "$properties": {
+          "Anchored": true,
+          "CanCollide": false,
+          "CFrame": [0, 0.15, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+          "Color": [0.706, 0.902, 0.627],
+          "Size": [100, 0.2, 100],
+          "Transparency": 0.92
+        }
+      },
+
+      "CleanupZone": {
+        "$className": "Part",
+        "$properties": {
+          "Anchored": true,
+          "CanCollide": false,
+          "CFrame": [0, 0.15, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+          "Color": [1, 0.7569, 0.0275],
+          "Size": [14, 0.2, 14],
+          "Transparency": 0.5
+        }
+      },
+
+      "CleanupFence": {
+        "$className": "Folder",
+
+        "Posts": {
+          "$className": "Folder",
+
+          "CornerNE": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [8, 2, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.8, 4, 0.8]
+            }
+          },
+
+          "CornerNECap": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [8, 4.5, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.65, 0.2],
+              "Material": "SmoothPlastic",
+              "Shape": "Ball",
+              "Size": [1, 1, 1]
+            }
+          },
+
+          "CornerNW": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-8, 2, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.8, 4, 0.8]
+            }
+          },
+
+          "CornerNWCap": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [-8, 4.5, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.65, 0.2],
+              "Material": "SmoothPlastic",
+              "Shape": "Ball",
+              "Size": [1, 1, 1]
+            }
+          },
+
+          "CornerSE": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [8, 2, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.8, 4, 0.8]
+            }
+          },
+
+          "CornerSECap": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [8, 4.5, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.65, 0.2],
+              "Material": "SmoothPlastic",
+              "Shape": "Ball",
+              "Size": [1, 1, 1]
+            }
+          },
+
+          "CornerSW": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-8, 2, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.8, 4, 0.8]
+            }
+          },
+
+          "CornerSWCap": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [-8, 4.5, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.85, 0.65, 0.2],
+              "Material": "SmoothPlastic",
+              "Shape": "Ball",
+              "Size": [1, 1, 1]
+            }
+          },
+
+          "NorthMid1": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-4, 2, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          },
+
+          "NorthMid2": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [0, 2, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          },
+
+          "NorthMid3": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [4, 2, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          },
+
+          "WestMid1": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-8, 2, -4, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          },
+
+          "WestMid2": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-8, 2, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          },
+
+          "WestMid3": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-8, 2, 4, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          },
+
+          "EastMid1": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [8, 2, -4, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          },
+
+          "EastMid2": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [8, 2, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          },
+
+          "EastMid3": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [8, 2, 4, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          },
+
+          "SouthStubWest": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [-6.5, 2, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          },
+
+          "SouthStubEast": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CFrame": [6.5, 2, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.7, 4, 0.7]
+            }
+          }
+        },
+
+        "Rails": {
+          "$className": "Folder",
+
+          "NorthRailTop": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [0, 3.2, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [16.4, 0.3, 0.3]
+            }
+          },
+
+          "NorthRailBottom": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [0, 1.2, 8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [16.4, 0.3, 0.3]
+            }
+          },
+
+          "WestRailTop": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [-8, 3.2, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.3, 0.3, 16.4]
+            }
+          },
+
+          "WestRailBottom": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [-8, 1.2, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.3, 0.3, 16.4]
+            }
+          },
+
+          "EastRailTop": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [8, 3.2, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.3, 0.3, 16.4]
+            }
+          },
+
+          "EastRailBottom": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [8, 1.2, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [0.3, 0.3, 16.4]
+            }
+          },
+
+          "SouthRailWestTop": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [-6.5, 3.2, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [3.4, 0.3, 0.3]
+            }
+          },
+
+          "SouthRailWestBottom": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [-6.5, 1.2, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [3.4, 0.3, 0.3]
+            }
+          },
+
+          "SouthRailEastTop": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [6.5, 3.2, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [3.4, 0.3, 0.3]
+            }
+          },
+
+          "SouthRailEastBottom": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "CFrame": [6.5, 1.2, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+              "Color": [0.4, 0.25, 0.15],
+              "Material": "WoodPlanks",
+              "Size": [3.4, 0.3, 0.3]
+            }
+          }
+        }
+      },
+
+      "CleanupZoneArch": {
+        "$className": "Model",
+
+        "PostLeft": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [-5, 4, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.4, 0.25, 0.15],
+            "Material": "WoodPlanks",
+            "Size": [1, 8, 1]
+          }
+        },
+
+        "PostLeftCap": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "CFrame": [-5, 8.3, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.85, 0.65, 0.2],
+            "Material": "SmoothPlastic",
+            "Shape": "Ball",
+            "Size": [1.4, 1.4, 1.4]
+          }
+        },
+
+        "PostRight": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [5, 4, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.4, 0.25, 0.15],
+            "Material": "WoodPlanks",
+            "Size": [1, 8, 1]
+          }
+        },
+
+        "PostRightCap": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "CFrame": [5, 8.3, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.85, 0.65, 0.2],
+            "Material": "SmoothPlastic",
+            "Shape": "Ball",
+            "Size": [1.4, 1.4, 1.4]
+          }
+        },
+
+        "Beam": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [0, 8.5, -8, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.4, 0.25, 0.15],
+            "Material": "WoodPlanks",
+            "Size": [12, 1, 1]
+          }
+        },
+
+        "Sign": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "CFrame": [0, 7, -7.6, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.95, 0.85, 0.5],
+            "Material": "WoodPlanks",
+            "Size": [6, 1.6, 0.2]
+          },
+
+          "Text": {
+            "$className": "SurfaceGui",
+            "$properties": {
+              "Face": "Front",
+              "LightInfluence": 0
+            },
+
+            "Label": {
+              "$className": "TextLabel",
+              "$properties": {
+                "BackgroundTransparency": 1,
+                "Font": "SourceSansBold",
+                "Size": {"UDim2": [[1, 0], [1, 0]]},
+                "Text": "Cleanup Zone",
+                "TextColor3": [0.15, 0.1, 0.05],
+                "TextScaled": true
+              }
+            }
+          }
         }
       }
     },
+
     "Lighting": {
       "$properties": {
-        "Ambient": [
-          0,
-          0,
-          0
-        ],
-        "Brightness": 2,
+        "Ambient": [0.15, 0.15, 0.18],
+        "OutdoorAmbient": [0.6, 0.55, 0.5],
+        "Brightness": 3,
+        "ClockTime": 16,
         "GlobalShadows": true,
+        "ShadowSoftness": 0.2,
         "Outlines": false,
-        "Technology": "Voxel"
+        "Technology": "Future"
+      },
+
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Color": [0.92, 0.75, 0.55],
+          "Decay": [0.6, 0.4, 0.25],
+          "Density": 0.2,
+          "Glare": 0.2,
+          "Haze": 0.8,
+          "Offset": 0.25
+        }
+      },
+
+      "Bloom": {
+        "$className": "BloomEffect",
+        "$properties": {
+          "Intensity": 0.35,
+          "Size": 20,
+          "Threshold": 1.5
+        }
+      },
+
+      "SunRays": {
+        "$className": "SunRaysEffect",
+        "$properties": {
+          "Intensity": 0.25,
+          "Spread": 0.5
+        }
       }
     },
     "SoundService": {

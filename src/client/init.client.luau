@@ -1,1 +1,3 @@
-print("Hello world, from client!!!")
+local CameraSetup = require(script.CameraSetup)
+
+CameraSetup.Start()
