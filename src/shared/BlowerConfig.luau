@@ -60,4 +60,12 @@ return {
 	HoseColor = Color3.fromRGB(35, 35, 35),
 	HoseWidth = 0.2,
 	HoseCurveSize = 3.5,
+
+	-- Overheating: continuous blowing builds heat; hitting the cap force-stops the tool and locks
+	-- it out (Activated does nothing) until it cools back down to OverheatResumeThreshold. Cooling
+	-- runs any time it's not actively blowing, whether the player let go or it force-stopped itself.
+	OverheatMax = 100,
+	HeatGainPerSecond = 11, -- ~9s of continuous blowing to hit the cap
+	HeatCoolPerSecond = 20, -- cools noticeably faster than it heats, so it recovers quickly
+	OverheatResumeThreshold = 15, -- must cool down to this (out of OverheatMax) before it can fire again
 }

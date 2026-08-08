@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local StarterPack = game:GetService("StarterPack")
 local Workspace = game:GetService("Workspace")
 
@@ -251,6 +252,14 @@ local function watchTool(tool)
 	-- the light could never be reset back to red on unequip.
 	local equippedCharacter = tool.Parent
 
+	-- Overheat state. Heat is 0..OverheatMax; replicated to the client as a 0..1 fraction attribute
+	-- (plus a separate boolean for the locked-out state) so the UI never has to guess the cap.
+	local heat = 0
+	local overheated = false
+	local lastSentFraction = -1
+	tool:SetAttribute("HeatFraction", 0)
+	tool:SetAttribute("Overheated", false)
+
 	-- Present whenever equipped, independent of the blowing toggle (a real hose stays attached
 	-- either way). Retries briefly if the backpack accessory hasn't finished attaching yet.
 	local function createHose()
@@ -324,7 +333,41 @@ local function watchTool(tool)
 		setIndicatorLight(equippedCharacter, false)
 	end
 
+	-- Runs every frame regardless of blowing state, since cooling has to happen while idle too.
+	-- Replication is throttled to whenever the fraction actually moves (rounded), not every frame.
+	local function updateHeat(dt)
+		if blowing then
+			heat = math.min(BlowerConfig.OverheatMax, heat + BlowerConfig.HeatGainPerSecond * dt)
+			if heat >= BlowerConfig.OverheatMax and not overheated then
+				overheated = true
+				toggledOn = false
+				stopBlowing()
+				tool:SetAttribute("Overheated", true)
+			end
+		else
+			heat = math.max(0, heat - BlowerConfig.HeatCoolPerSecond * dt)
+			if overheated and heat <= BlowerConfig.OverheatResumeThreshold then
+				overheated = false
+				tool:SetAttribute("Overheated", false)
+			end
+		end
+
+		local fraction = heat / BlowerConfig.OverheatMax
+		if math.abs(fraction - lastSentFraction) >= 0.002 then
+			lastSentFraction = fraction
+			tool:SetAttribute("HeatFraction", fraction)
+		end
+	end
+
+	local heatConnection = RunService.Heartbeat:Connect(updateHeat)
+	tool.Destroying:Connect(function()
+		heatConnection:Disconnect()
+	end)
+
 	tool.Activated:Connect(function()
+		if overheated then
+			return
+		end
 		toggledOn = not toggledOn
 		if toggledOn then
 			startBlowing()
