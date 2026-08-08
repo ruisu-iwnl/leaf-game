@@ -58,8 +58,42 @@ return {
 	WindLiftMax = 0.18,
 	WindSpinDegreesMin = 10,
 	WindSpinDegreesMax = 30,
-	WindDurationMin = 0.2,
-	WindDurationMax = 0.35,
+	WindDurationMin = 0.3,
+	WindDurationMax = 0.5,
+
+	-- Tumble applied mid-glide (both the footstep nudge and the blower's push), fading to exactly
+	-- 0 at the start/end so the leaf still lands flat -- it just doesn't slide perfectly flat
+	-- along the ground while in motion, more like it's briefly caught in the air.
+	GlideTumbleAmplitudeDegreesMin = 20,
+	GlideTumbleAmplitudeDegreesMax = 55,
+	GlideTumbleFreqMin = 1.5,
+	GlideTumbleFreqMax = 3,
+
+	-- Sideways sway (perpendicular to the direct start->target line) plus a slower secondary
+	-- flutter, and a flattened/hover-y lift curve instead of one clean bounce -- so a blown leaf
+	-- reads as featherweight and swept around by air, not like it's hopping in a straight line.
+	-- Frequencies are in Hz (real seconds), NOT cycles-per-glide -- glides here only last a
+	-- fraction of a second, so a "cycles per glide" rate (like the falling-leaf sway uses, where
+	-- glides last several seconds) would compress into a jittery blur.
+	GlideSwayAmplitudeRatio = 0.22, -- fraction of the glide's travel distance
+	GlideSwayFreqMin = 1,
+	GlideSwayFreqMax = 1.8,
+	GlideVerticalFlutterRatio = 0.25, -- fraction of liftHeight
+
+	-- Vertical motion is asymmetric, not a symmetric bounce: reaches peak height quickly, then
+	-- eases down and decelerates as it nears the ground -- like a feather settling under drag,
+	-- not a ball falling under gravity. Both vary per-leaf so a batch doesn't move in lockstep.
+	GlidePeakTimeMin = 0.2, -- fraction of the glide duration spent rising
+	GlidePeakTimeMax = 0.4,
+	GlideFallExponentMin = 1.6, -- > 1 drops earlier, then eases off gently right near the ground
+	GlideFallExponentMax = 2.4,
+
+	-- Obstacles (walls, fences, trees) clamp how far a glide target can be pushed -- see
+	-- clampTargetForObstacles. Leaves stay this far short of whatever they'd hit.
+	ObstacleClearance = 1,
+	-- Fraction of the leftover push distance a leaf keeps after bouncing off an obstacle
+	-- (reflected off the surface normal), so it visibly deflects back instead of just stopping dead.
+	BounceEnergyRatio = 0.4,
 
 	Colors = {
 		Color3.fromRGB(196, 120, 40),
@@ -69,9 +103,11 @@ return {
 		Color3.fromRGB(120, 84, 40),
 	},
 
+	-- Note: the cleanup zone used to have a blanket avoid-region here too, blocking leaves from
+	-- ever being placed/pushed there at all. Removed -- the whole point of the blower is to be
+	-- able to blow leaves INTO the cleanup zone. The fence posts themselves are still respected
+	-- via clampTargetForObstacles' raycast (real geometry), just not the open platform/gate area.
 	AvoidRegions = {
 		{ Center = Vector3.new(-32, 0, 20), Size = Vector3.new(18, 0, 16) },
-		-- Cleanup zone fence spans roughly X/Z = +-8.4; a couple studs of buffer beyond that.
-		{ Center = Vector3.new(0, 0, 0), Size = Vector3.new(20, 0, 20) },
 	},
 }

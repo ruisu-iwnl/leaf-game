@@ -189,6 +189,130 @@ local function computeLeafCFrame(state, t)
 	return CFrame.new(x, y, z) * CFrame.Angles(tumbleX, yaw, tumbleZ)
 end
 
+-- If a glide's straight-line path would pass through solid geometry (a wall, fence, tree trunk),
+-- reflects the leaf off the surface normal instead of just stopping dead at it -- like a leaf
+-- actually deflecting off a wall rather than getting stuck against it. Raycast at roughly leaf
+-- height, excluding the leaf folders themselves (leaves shouldn't block leaves).
+local function clampTargetForObstacles(fromX, fromZ, y, targetX, targetZ)
+	local rayHeight = y + 0.5
+	local fromPos = Vector3.new(fromX, rayHeight, fromZ)
+	local toPos = Vector3.new(targetX, rayHeight, targetZ)
+	local offset = toPos - fromPos
+	local distance = offset.Magnitude
+	if distance < 0.05 then
+		return targetX, targetZ
+	end
+
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.FilterDescendantsInstances = { fallingFolder, groundFolder }
+
+	local result = Workspace:Raycast(fromPos, offset, raycastParams)
+	if result then
+		local incomingDir = offset.Unit
+		local hitPoint = fromPos + incomingDir * math.max(result.Distance - LeafConfig.ObstacleClearance, 0.1)
+
+		local flatNormal = Vector3.new(result.Normal.X, 0, result.Normal.Z)
+		if flatNormal.Magnitude > 0.01 then
+			flatNormal = flatNormal.Unit
+			local reflected = incomingDir - 2 * incomingDir:Dot(flatNormal) * flatNormal
+			local leftoverDistance = math.max(distance - result.Distance, 0) * LeafConfig.BounceEnergyRatio
+			local bounceTarget = hitPoint + reflected * leftoverDistance
+
+			-- Check the bounce path too (e.g. bouncing straight into a second wall at a corner):
+			-- one more clamp, no further recursive bouncing.
+			local bounceOffset = bounceTarget - hitPoint
+			if bounceOffset.Magnitude > 0.05 then
+				local bounceResult = Workspace:Raycast(hitPoint, bounceOffset, raycastParams)
+				if bounceResult then
+					local safeBounceDistance = math.max(bounceResult.Distance - LeafConfig.ObstacleClearance, 0.1)
+					bounceTarget = hitPoint + bounceOffset.Unit * safeBounceDistance
+				end
+			end
+
+			targetX, targetZ = bounceTarget.X, bounceTarget.Z
+		else
+			targetX, targetZ = hitPoint.X, hitPoint.Z
+		end
+	end
+
+	-- Hard backstop independent of the raycast above: a target can never end up outside the
+	-- playable area at all, regardless of grazing angles or thin geometry at the map's edge.
+	local halfX = spawnArea.Size.X / 2 - 2
+	local halfZ = spawnArea.Size.Z / 2 - 2
+	local center = spawnArea.Position
+	targetX = math.clamp(targetX, center.X - halfX, center.X + halfX)
+	targetZ = math.clamp(targetZ, center.Z - halfZ, center.Z + halfZ)
+
+	return targetX, targetZ
+end
+
+-- Core "glide to a new resting spot" mechanic shared by the small footstep wind-disturbance nudge
+-- and the blower's much bigger push -- only the distance/duration/lift/spin differ between them.
+local function startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees)
+	targetX, targetZ = clampTargetForObstacles(rest.baseX, rest.baseZ, rest.restY, targetX, targetZ)
+
+	-- Don't drag a leaf into the cleanup zone fence or house footprint.
+	if isInAvoidRegion(targetX, targetZ) then
+		return
+	end
+
+	rest.disturbing = true
+
+	local spin = math.rad(spinDegrees) * (math.random() < 0.5 and -1 or 1)
+	local tumbleAmplitude = math.rad(LeafConfig.GlideTumbleAmplitudeDegreesMin
+		+ math.random() * (LeafConfig.GlideTumbleAmplitudeDegreesMax - LeafConfig.GlideTumbleAmplitudeDegreesMin))
+	local tumbleFreq = LeafConfig.GlideTumbleFreqMin + math.random() * (LeafConfig.GlideTumbleFreqMax - LeafConfig.GlideTumbleFreqMin)
+
+	-- Sideways sway happens perpendicular to the straight start->target line, so it reads as the
+	-- leaf getting swept side to side while airborne instead of just travelling in a dead-straight
+	-- path. Falls back to an arbitrary perpendicular if start and target are (almost) the same point.
+	local travelDx = targetX - rest.baseX
+	local travelDz = targetZ - rest.baseZ
+	local travelLength = math.sqrt(travelDx * travelDx + travelDz * travelDz)
+	local perpX, perpZ
+	if travelLength > 0.01 then
+		perpX, perpZ = -travelDz / travelLength, travelDx / travelLength
+	else
+		perpX, perpZ = 1, 0
+	end
+
+	local swayAmplitude = travelLength * LeafConfig.GlideSwayAmplitudeRatio
+	local swayFreq = LeafConfig.GlideSwayFreqMin + math.random() * (LeafConfig.GlideSwayFreqMax - LeafConfig.GlideSwayFreqMin)
+	local swayPhase = math.random() * math.pi * 2
+	local flutterFreq = swayFreq * (1.4 + math.random() * 0.6)
+	local flutterPhase = math.random() * math.pi * 2
+
+	-- Randomized per-leaf so a whole batch doesn't rise/fall in obvious lockstep.
+	local peakTime = LeafConfig.GlidePeakTimeMin + math.random() * (LeafConfig.GlidePeakTimeMax - LeafConfig.GlidePeakTimeMin)
+	local fallExponent = LeafConfig.GlideFallExponentMin + math.random() * (LeafConfig.GlideFallExponentMax - LeafConfig.GlideFallExponentMin)
+
+	table.insert(disturbances, {
+		part = leaf,
+		rest = rest,
+		startX = rest.baseX,
+		startZ = rest.baseZ,
+		targetX = targetX,
+		targetZ = targetZ,
+		startYaw = rest.yaw,
+		targetYaw = rest.yaw + spin,
+		liftHeight = liftHeight,
+		tumbleAmplitude = tumbleAmplitude,
+		tumbleFreq = tumbleFreq,
+		perpX = perpX,
+		perpZ = perpZ,
+		swayAmplitude = swayAmplitude,
+		swayFreq = swayFreq,
+		swayPhase = swayPhase,
+		flutterFreq = flutterFreq,
+		flutterPhase = flutterPhase,
+		peakTime = peakTime,
+		fallExponent = fallExponent,
+		duration = duration,
+		elapsed = 0,
+	})
+end
+
 -- Pushes a resting leaf to an actual new spot a short distance away (not back to where it
 -- started) so repeated gusts genuinely relocate it over time instead of springing back like
 -- a boomerang. Guarded by rest.disturbing so a lingering player doesn't restart it mid-glide.
@@ -210,48 +334,72 @@ local function triggerDisturbance(leaf, fromPosition)
 	local pushDistance = LeafConfig.WindPushMin + math.random() * (LeafConfig.WindPushMax - LeafConfig.WindPushMin)
 	local targetX = rest.baseX + dirX * pushDistance
 	local targetZ = rest.baseZ + dirZ * pushDistance
+	local liftHeight = LeafConfig.WindLiftMin + math.random() * (LeafConfig.WindLiftMax - LeafConfig.WindLiftMin)
+	local duration = LeafConfig.WindDurationMin + math.random() * (LeafConfig.WindDurationMax - LeafConfig.WindDurationMin)
+	local spinDegrees = LeafConfig.WindSpinDegreesMin + math.random() * (LeafConfig.WindSpinDegreesMax - LeafConfig.WindSpinDegreesMin)
 
-	-- Don't drag a leaf into the cleanup zone fence or house footprint.
-	if isInAvoidRegion(targetX, targetZ) then
-		return
-	end
-
-	rest.disturbing = true
-
-	local spin = math.rad(LeafConfig.WindSpinDegreesMin + math.random() * (LeafConfig.WindSpinDegreesMax - LeafConfig.WindSpinDegreesMin))
-		* (math.random() < 0.5 and -1 or 1)
-
-	table.insert(disturbances, {
-		part = leaf,
-		rest = rest,
-		startX = rest.baseX,
-		startZ = rest.baseZ,
-		targetX = targetX,
-		targetZ = targetZ,
-		startYaw = rest.yaw,
-		targetYaw = rest.yaw + spin,
-		liftHeight = LeafConfig.WindLiftMin + math.random() * (LeafConfig.WindLiftMax - LeafConfig.WindLiftMin),
-		duration = LeafConfig.WindDurationMin + math.random() * (LeafConfig.WindDurationMax - LeafConfig.WindDurationMin),
-		elapsed = 0,
-	})
+	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees)
 end
 
--- Glides the leaf from its old spot to the new one (smoothstep), with a small hop mid-glide.
--- Once it arrives, the leaf's resting position is updated to the new spot for good.
+-- Same idea, but with the blower's much bigger distance/duration, and pushed along a fixed
+-- direction (where the player is aiming) instead of radially away from a point. Each leaf's
+-- direction gets a random rotation within BlowDirectionJitterDegrees so a whole batch scatters
+-- naturally instead of every leaf flying in one perfectly parallel line.
+local function blowRestingLeaf(leaf, rest, direction, blowConfig)
+	local jitterRad = math.rad((math.random() - 0.5) * 2 * blowConfig.BlowDirectionJitterDegrees)
+	local cos, sin = math.cos(jitterRad), math.sin(jitterRad)
+	local jitteredX = direction.X * cos - direction.Z * sin
+	local jitteredZ = direction.X * sin + direction.Z * cos
+
+	local pushDistance = blowConfig.BlowPushDistanceMin + math.random() * (blowConfig.BlowPushDistanceMax - blowConfig.BlowPushDistanceMin)
+	local targetX = rest.baseX + jitteredX * pushDistance
+	local targetZ = rest.baseZ + jitteredZ * pushDistance
+	local liftHeight = blowConfig.BlowLiftMin + math.random() * (blowConfig.BlowLiftMax - blowConfig.BlowLiftMin)
+	local duration = blowConfig.BlowDurationMin + math.random() * (blowConfig.BlowDurationMax - blowConfig.BlowDurationMin)
+	local spinDegrees = blowConfig.BlowSpinDegreesMin + math.random() * (blowConfig.BlowSpinDegreesMax - blowConfig.BlowSpinDegreesMin)
+
+	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees)
+end
+
+-- Glides the leaf from its old spot to the new one, but not in a straight line: a perpendicular
+-- sway (plus a faster flutter layered on top) sweeps it side to side, and the vertical motion is
+-- asymmetric -- quick rise to a per-leaf peak, then a slow, lingering drift back down that only
+-- settles right at the very end -- rather than a symmetric bounce, so it reads as featherweight
+-- and caught in moving air rather than hopping directly from A to B. Everything (sway, flutter,
+-- tumble) is scaled by the same envelope, so it's exactly 0 at the start/end -- it still lands
+-- precisely on target, flat. Once it arrives, the leaf's resting position updates for good.
 local function updateDisturbances(dt)
 	for i = #disturbances, 1, -1 do
 		local state = disturbances[i]
 		state.elapsed += dt
 		local t = math.clamp(state.elapsed / state.duration, 0, 1)
 		local ease = t * t * (3 - 2 * t)
-		local hop = math.sin(t * math.pi)
+
+		local envelope
+		if t <= state.peakTime then
+			envelope = math.sin((t / state.peakTime) * math.pi / 2)
+		else
+			local fallT = (t - state.peakTime) / (1 - state.peakTime)
+			envelope = (1 - fallT) ^ state.fallExponent
+		end
 
 		if state.part.Parent then
-			local x = state.startX + (state.targetX - state.startX) * ease
-			local z = state.startZ + (state.targetZ - state.startZ) * ease
-			local y = state.rest.restY + state.liftHeight * hop
+			-- Driven by real elapsed seconds (not t, which is 0-1 over the whole glide) so the
+			-- sway/flutter rate stays consistent regardless of how long any given glide lasts.
+			local sway = (math.sin(state.elapsed * state.swayFreq * math.pi * 2 + state.swayPhase)
+				+ math.sin(state.elapsed * state.flutterFreq * math.pi * 2 + state.flutterPhase) * 0.4) * state.swayAmplitude * envelope
+
+			local x = state.startX + (state.targetX - state.startX) * ease + state.perpX * sway
+			local z = state.startZ + (state.targetZ - state.startZ) * ease + state.perpZ * sway
+
+			local verticalFlutter = math.sin(state.elapsed * state.flutterFreq * math.pi * 2 + state.flutterPhase + 1)
+				* state.liftHeight * LeafConfig.GlideVerticalFlutterRatio * envelope
+			local y = state.rest.restY + state.liftHeight * envelope + verticalFlutter
+
 			local yaw = state.startYaw + (state.targetYaw - state.startYaw) * ease
-			state.part.CFrame = CFrame.new(x, y, z) * CFrame.Angles(0, yaw, 0)
+			local tumbleX = math.sin(state.elapsed * state.tumbleFreq * math.pi * 2) * state.tumbleAmplitude * envelope
+			local tumbleZ = math.cos(state.elapsed * state.tumbleFreq * math.pi * 2 * 0.7) * state.tumbleAmplitude * envelope
+			state.part.CFrame = CFrame.new(x, y, z) * CFrame.Angles(tumbleX, yaw, tumbleZ)
 		end
 
 		if t >= 1 then
@@ -378,6 +526,49 @@ end
 Players.PlayerRemoving:Connect(function(player)
 	lastPlayerPositions[player] = nil
 end)
+
+-- Called by BlowerTool on a timer while a player's blower is equipped: pushes every resting leaf
+-- within the cone further along `direction`, and nudges the landing target of any still-falling
+-- leaf caught in the cone so it visibly redirects as it drops. `blowConfig` is BlowerConfig itself
+-- (a plain table of Blow* tuning values) -- this module doesn't need to know it's from the blower.
+function LeafSpawner.ApplyBlow(origin, direction, blowConfig)
+	local cosHalfAngle = math.cos(math.rad(blowConfig.BlowConeAngleDegrees / 2))
+	local range = blowConfig.BlowRange
+
+	for leaf, rest in pairs(restingLeaves) do
+		if not rest.disturbing then
+			local toLeafX = rest.baseX - origin.X
+			local toLeafZ = rest.baseZ - origin.Z
+			local distance = math.sqrt(toLeafX * toLeafX + toLeafZ * toLeafZ)
+			if distance > 0.05 and distance <= range then
+				local dot = (toLeafX * direction.X + toLeafZ * direction.Z) / distance
+				if dot >= cosHalfAngle then
+					blowRestingLeaf(leaf, rest, direction, blowConfig)
+				end
+			end
+		end
+	end
+
+	for _, state in ipairs(fallingLeaves) do
+		local toLeafX = state.baseX - origin.X
+		local toLeafZ = state.baseZ - origin.Z
+		local distance = math.sqrt(toLeafX * toLeafX + toLeafZ * toLeafZ)
+		if distance <= range then
+			local dot = distance > 0.05 and (toLeafX * direction.X + toLeafZ * direction.Z) / distance or 1
+			if dot >= cosHalfAngle then
+				local wantedX = state.baseX + direction.X * blowConfig.FallingRedirectPerTick
+				local wantedZ = state.baseZ + direction.Z * blowConfig.FallingRedirectPerTick
+				-- Same obstacle clamp as resting leaves -- this path was missing it before, which
+				-- is why leaves being blown mid-air could still sail through walls/boundary edges.
+				local newX, newZ = clampTargetForObstacles(state.baseX, state.baseZ, state.restY, wantedX, wantedZ)
+				if not isInAvoidRegion(newX, newZ) then
+					state.baseX = newX
+					state.baseZ = newZ
+				end
+			end
+		end
+	end
+end
 
 function LeafSpawner.Start()
 	if started then
