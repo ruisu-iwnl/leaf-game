@@ -306,7 +306,8 @@ local function watchTool(tool)
 		while blowing do
 			local origin, direction = getAimOriginDirection(tool, nozzle)
 			if origin then
-				LeafSpawner.ApplyBlow(origin, direction, BlowerConfig)
+				local player = Players:GetPlayerFromCharacter(tool.Parent)
+				LeafSpawner.ApplyBlow(player, origin, direction, BlowerConfig)
 			end
 			task.wait(BlowerConfig.BlowInterval)
 		end

@@ -1,4 +1,5 @@
 -- local BlowerConeIndicator = require(script.BlowerConeIndicator)
+local AdminCommandBar = require(script.AdminCommandBar)
 local CameraSetup = require(script.CameraSetup)
 local CleanupProgressBar = require(script.CleanupProgressBar)
 local LeafCollector = require(script.LeafCollector)
@@ -8,6 +9,7 @@ local SackUI = require(script.SackUI)
 local SettingsUI = require(script.SettingsUI)
 
 -- BlowerConeIndicator.Start() -- cone highlight disabled per request; re-enable by uncommenting
+AdminCommandBar.Start()
 CameraSetup.Start()
 CleanupProgressBar.Start()
 LeafCollector.Start()

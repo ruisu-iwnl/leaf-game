@@ -25,6 +25,25 @@ local restingLeaves = {} -- leaf -> { baseX, baseZ, restY, yaw, disturbing }
 local disturbances = {}
 local lastPlayerPositions = {} -- player -> Vector3, used to gate disturbance on actual movement
 local started = false
+local deliveryListeners = {}
+
+-- Fired whenever leaves land in the cleanup zone with a known delivering player (blown in, or a
+-- sack drop-off) -- kept as a plain callback list rather than requiring MoneySystem directly, so
+-- this module still doesn't need to know Coins/players exist as a concept, just that "someone"
+-- may be listening. Deliveries with no attributable player (e.g. wind-drifted, nobody blowing)
+-- simply never fire this.
+local function notifyDelivery(player, count)
+	if not player then
+		return
+	end
+	for _, callback in ipairs(deliveryListeners) do
+		callback(player, count)
+	end
+end
+
+function LeafSpawner.OnLeafDelivered(callback)
+	table.insert(deliveryListeners, callback)
+end
 
 local function isInAvoidRegion(x, z)
 	for _, region in pairs(LeafConfig.AvoidRegions) do
@@ -162,19 +181,21 @@ end
 -- never be double-counted (no lingering state anywhere still references it afterward). Increments
 -- the shared LeavesCleaned count -- exposed as a Workspace attribute for later steps (UI, rewards)
 -- to read without this module needing to know about players/coins yet.
-local function consumeLeaf(leaf, x, y, z)
+local function consumeLeaf(leaf, x, y, z, player)
 	restingLeaves[leaf] = nil
 	playConsumeVFX(Vector3.new(x, y, z))
 	leavesCleanedCount += 1
 	Workspace:SetAttribute("LeavesCleaned", leavesCleanedCount)
 	registerZoneProgress(1)
+	notifyDelivery(player, 1)
 	leaf:Destroy()
 end
 
 -- Public equivalent of consumeLeaf, for deliveries that aren't a single tracked leaf part -- the
 -- sack system's whole reason for existing. `position` (optional) plays the same VFX burst a
--- blown-in leaf gets, just once for the whole batch rather than once per leaf.
-function LeafSpawner.DeliverToZone(count, position)
+-- blown-in leaf gets, just once for the whole batch rather than once per leaf. `player` (optional)
+-- is who should be credited for the delivery, e.g. the sack's owner.
+function LeafSpawner.DeliverToZone(count, position, player)
 	if count <= 0 then
 		return
 	end
@@ -184,6 +205,7 @@ function LeafSpawner.DeliverToZone(count, position)
 	leavesCleanedCount += count
 	Workspace:SetAttribute("LeavesCleaned", leavesCleanedCount)
 	registerZoneProgress(count)
+	notifyDelivery(player, count)
 end
 
 -- A leaf picked directly off the ground into a player's sack (as opposed to blown into the
@@ -368,7 +390,9 @@ end
 
 -- Core "glide to a new resting spot" mechanic shared by the small footstep wind-disturbance nudge
 -- and the blower's much bigger push -- only the distance/duration/lift/spin differ between them.
-local function startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees)
+-- `player` (optional, nil for footstep nudges) is who gets credited with the coin reward if this
+-- glide happens to land the leaf in the cleanup zone.
+local function startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees, player)
 	targetX, targetZ = clampTargetForObstacles(rest.baseX, rest.baseZ, rest.restY, targetX, targetZ)
 
 	-- Don't drag a leaf into the cleanup zone fence or house footprint.
@@ -429,6 +453,7 @@ local function startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, sp
 		fallExponent = fallExponent,
 		duration = duration,
 		elapsed = 0,
+		player = player,
 	})
 end
 
@@ -464,7 +489,7 @@ end
 -- direction (where the player is aiming) instead of radially away from a point. Each leaf's
 -- direction gets a random rotation within BlowDirectionJitterDegrees so a whole batch scatters
 -- naturally instead of every leaf flying in one perfectly parallel line.
-local function blowRestingLeaf(leaf, rest, direction, blowConfig)
+local function blowRestingLeaf(leaf, rest, direction, blowConfig, player)
 	local jitterRad = math.rad((math.random() - 0.5) * 2 * blowConfig.BlowDirectionJitterDegrees)
 	local cos, sin = math.cos(jitterRad), math.sin(jitterRad)
 	local jitteredX = direction.X * cos - direction.Z * sin
@@ -477,7 +502,7 @@ local function blowRestingLeaf(leaf, rest, direction, blowConfig)
 	local duration = blowConfig.BlowDurationMin + math.random() * (blowConfig.BlowDurationMax - blowConfig.BlowDurationMin)
 	local spinDegrees = blowConfig.BlowSpinDegreesMin + math.random() * (blowConfig.BlowSpinDegreesMax - blowConfig.BlowSpinDegreesMin)
 
-	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees)
+	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees, player)
 end
 
 -- Glides the leaf from its old spot to the new one, but not in a straight line: a perpendicular
@@ -523,7 +548,7 @@ local function updateDisturbances(dt)
 
 		if t >= 1 then
 			if isInCleanupZone(state.targetX, state.targetZ) then
-				consumeLeaf(state.part, state.targetX, state.rest.restY, state.targetZ)
+				consumeLeaf(state.part, state.targetX, state.rest.restY, state.targetZ, state.player)
 			else
 				state.rest.baseX = state.targetX
 				state.rest.baseZ = state.targetZ
@@ -654,7 +679,9 @@ end)
 -- within the cone further along `direction`, and nudges the landing target of any still-falling
 -- leaf caught in the cone so it visibly redirects as it drops. `blowConfig` is BlowerConfig itself
 -- (a plain table of Blow* tuning values) -- this module doesn't need to know it's from the blower.
-function LeafSpawner.ApplyBlow(origin, direction, blowConfig)
+-- `player` is who's holding the blower, credited with coins for any leaf this push lands in the
+-- cleanup zone.
+function LeafSpawner.ApplyBlow(player, origin, direction, blowConfig)
 	local cosHalfAngle = math.cos(math.rad(blowConfig.BlowConeAngleDegrees / 2))
 	local range = blowConfig.BlowRange
 
@@ -666,7 +693,7 @@ function LeafSpawner.ApplyBlow(origin, direction, blowConfig)
 			if distance > 0.05 and distance <= range then
 				local dot = (toLeafX * direction.X + toLeafZ * direction.Z) / distance
 				if dot >= cosHalfAngle then
-					blowRestingLeaf(leaf, rest, direction, blowConfig)
+					blowRestingLeaf(leaf, rest, direction, blowConfig, player)
 				end
 			end
 		end

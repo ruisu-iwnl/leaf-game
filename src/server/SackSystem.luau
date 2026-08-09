@@ -221,10 +221,11 @@ local function runSackDeliveryLoop()
 			if handle and isInCleanupZone(handle.Position) then
 				local leafCount = tool:GetAttribute("LeafCount") or 0
 				activeSacks[tool] = nil
-				LeafSpawner.DeliverToZone(leafCount, handle.Position)
 
 				local ownerUserId = tool:GetAttribute("OwnerUserId")
 				local owner = ownerUserId and Players:GetPlayerByUserId(ownerUserId)
+				LeafSpawner.DeliverToZone(leafCount, handle.Position, owner)
+
 				if owner then
 					owner:SetAttribute("ActiveSackCount", math.max((owner:GetAttribute("ActiveSackCount") or 1) - 1, 0))
 				end
