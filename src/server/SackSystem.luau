@@ -313,9 +313,21 @@ local function buildPickupSequence()
 	return sequence
 end
 
--- Registration can fail depending on context, so this is all best-effort: if it doesn't work out,
--- the gesture just silently doesn't play rather than breaking leaf collection itself.
+-- KeyframeSequenceProvider:RegisterKeyframeSequence is restricted to LocalUserSecurity -- it only
+-- works when this is actually running inside Roblox Studio, never on a live published server. So
+-- once SackConfig.PickupAnimationId is filled in (see setup instructions there), that baked id is
+-- used directly via a plain Animation instance everywhere, and the registration call below never
+-- runs at all in production. Left blank, this auto-bakes in Studio and prints the id to copy in --
+-- a one-time step, same as e.g. enabling DataStore access, that genuinely can't be scripted away.
 local function setupPickupAnimation()
+	if SackConfig.PickupAnimationId ~= "" then
+		local animation = Instance.new("Animation")
+		animation.Name = "SackPickupGesture"
+		animation.AnimationId = SackConfig.PickupAnimationId
+		pickupAnimation = animation
+		return
+	end
+
 	local ok, sequence = pcall(buildPickupSequence)
 	if not ok then
 		return
@@ -324,8 +336,15 @@ local function setupPickupAnimation()
 		return KeyframeSequenceProvider:RegisterKeyframeSequence(sequence)
 	end)
 	if not registered or not animId then
+		warn("[SackSystem] couldn't bake the pickup animation -- this only works inside Roblox Studio")
 		return
 	end
+
+	print(string.format(
+		"[SackSystem] baked pickup animation id: %s -- paste this into SackConfig.PickupAnimationId so it also works in the published game",
+		animId
+	))
+
 	local animation = Instance.new("Animation")
 	animation.Name = "SackPickupGesture"
 	animation.AnimationId = animId

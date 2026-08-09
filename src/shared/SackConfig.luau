@@ -18,4 +18,10 @@ return {
 	SackColor = Color3.fromRGB(120, 72, 38),
 	SackTieColor = Color3.fromRGB(80, 46, 22),
 	PickupPromptDistance = 8,
+
+	-- The pickup gesture, published as a real Animation asset via Studio's Clip Editor (the
+	-- KeyframeSequenceProvider auto-bake only ever produces a session-local id, not something a
+	-- live server can use -- see SackSystem.luau's setupPickupAnimation). Works everywhere now,
+	-- Studio and the published game both, since this is a real permanent asset id.
+	PickupAnimationId = "rbxassetid://93781977036631",
 }
