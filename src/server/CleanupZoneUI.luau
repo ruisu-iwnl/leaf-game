@@ -47,7 +47,7 @@ function CleanupZoneUI.Start()
 	tutorial.BackgroundTransparency = 1
 	tutorial.Size = UDim2.new(1, 0, 1, 0)
 	tutorial.Font = Enum.Font.FredokaOne
-	tutorial.Text = "Blow leaves here to clean them up!"
+	tutorial.Text = "Bring your leaves here to clean up!"
 	tutorial.TextScaled = false
 	tutorial.TextSize = 38
 	tutorial.TextWrapped = false

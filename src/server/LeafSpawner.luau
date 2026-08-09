@@ -128,23 +128,33 @@ local function playConsumeVFX(position)
 end
 
 -- Drives the billboard progress bar: a repeating quota (0 -> 100% every CleanupZoneGoal leaves),
--- not a lifetime total. Guards the delayed reset with a "still 0" check so a big batch of leaves
--- completing several laps within the same reset delay can't have a stale reset from an earlier lap
--- zero out a newer lap's already-in-progress fill.
-local function registerZoneProgress()
+-- not a lifetime total. Accepts a count > 1 (the sack system can deliver up to SackConfig
+-- .MaxCapacity leaves in one go) -- any overshoot past the goal carries over as the start of the
+-- next lap instead of being discarded, so a big delivery never silently "loses" leaves worth of
+-- progress. Guarded with a generation counter (not the old "still 0" check, since the remainder
+-- carried over is no longer always exactly 0) so a big batch completing several laps within the
+-- same reset delay can't have a stale reset clobber a newer lap's already-in-progress fill.
+local zoneResetGeneration = 0
+
+local function registerZoneProgress(count)
 	local goal = LeafConfig.CleanupZoneGoal
-	zoneCycleCount += 1
-	Workspace:SetAttribute("CleanupZoneCount", zoneCycleCount)
-	Workspace:SetAttribute("CleanupZoneProgress", math.min(zoneCycleCount / goal, 1))
+	zoneCycleCount += count
 
 	if zoneCycleCount >= goal then
-		zoneCycleCount = 0
+		zoneCycleCount = zoneCycleCount % goal
+		zoneResetGeneration += 1
+		local myGeneration = zoneResetGeneration
+		Workspace:SetAttribute("CleanupZoneCount", goal)
+		Workspace:SetAttribute("CleanupZoneProgress", 1)
 		task.delay(LeafConfig.CleanupZoneResetDelay, function()
-			if zoneCycleCount == 0 then
-				Workspace:SetAttribute("CleanupZoneCount", 0)
-				Workspace:SetAttribute("CleanupZoneProgress", 0)
+			if zoneResetGeneration == myGeneration then
+				Workspace:SetAttribute("CleanupZoneCount", zoneCycleCount)
+				Workspace:SetAttribute("CleanupZoneProgress", zoneCycleCount / goal)
 			end
 		end)
+	else
+		Workspace:SetAttribute("CleanupZoneCount", zoneCycleCount)
+		Workspace:SetAttribute("CleanupZoneProgress", zoneCycleCount / goal)
 	end
 end
 
@@ -157,8 +167,46 @@ local function consumeLeaf(leaf, x, y, z)
 	playConsumeVFX(Vector3.new(x, y, z))
 	leavesCleanedCount += 1
 	Workspace:SetAttribute("LeavesCleaned", leavesCleanedCount)
-	registerZoneProgress()
+	registerZoneProgress(1)
 	leaf:Destroy()
+end
+
+-- Public equivalent of consumeLeaf, for deliveries that aren't a single tracked leaf part -- the
+-- sack system's whole reason for existing. `position` (optional) plays the same VFX burst a
+-- blown-in leaf gets, just once for the whole batch rather than once per leaf.
+function LeafSpawner.DeliverToZone(count, position)
+	if count <= 0 then
+		return
+	end
+	if position then
+		playConsumeVFX(position)
+	end
+	leavesCleanedCount += count
+	Workspace:SetAttribute("LeavesCleaned", leavesCleanedCount)
+	registerZoneProgress(count)
+end
+
+-- A leaf picked directly off the ground into a player's sack (as opposed to blown into the
+-- cleanup zone) -- only resting leaves are collectible this way, and only ones not already
+-- mid-glide, matching the same guard ApplyBlow uses. Returns false (does nothing) if the leaf
+-- wasn't a valid, currently-resting leaf, so callers can't be tricked into double-counting one.
+function LeafSpawner.CollectLeaf(leaf)
+	local rest = restingLeaves[leaf]
+	if not rest or rest.disturbing then
+		return false
+	end
+	restingLeaves[leaf] = nil
+
+	local tween = TweenService:Create(leaf, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+		Size = Vector3.new(0.05, 0.02, 0.05),
+		Transparency = 1,
+	})
+	tween.Completed:Connect(function()
+		leaf:Destroy()
+	end)
+	tween:Play()
+
+	return true
 end
 
 -- Scheduled once per leaf via task.delay (cheap engine-side timer, no per-frame polling) rather than
