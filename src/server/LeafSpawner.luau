@@ -13,6 +13,12 @@ local fallingFolder
 local groundFolder
 local spawnArea
 local groundTop
+local cleanupZone
+local consumeVFXPart
+local consumeEmitter
+local consumeFlashEmitter
+local leavesCleanedCount = 0
+local zoneCycleCount = 0
 local fallingLeaves = {}
 local landedFalling = {}
 local restingLeaves = {} -- leaf -> { baseX, baseZ, restY, yaw, disturbing }
@@ -32,6 +38,20 @@ local function isInAvoidRegion(x, z)
 	return false
 end
 
+-- The CleanupZone part itself (not an AvoidRegion -- leaves must be able to be pushed in). Used
+-- both to keep leaves from randomly spawning/landing there on their own (see randomRestPosition)
+-- and to detect when a glide delivers one, so it only ever "arrives" via being blown/nudged in.
+local function isInCleanupZone(x, z)
+	if not cleanupZone then
+		return false
+	end
+	local halfX = cleanupZone.Size.X / 2
+	local halfZ = cleanupZone.Size.Z / 2
+	local center = cleanupZone.Position
+	return x >= center.X - halfX and x <= center.X + halfX
+		and z >= center.Z - halfZ and z <= center.Z + halfZ
+end
+
 -- X/Z sampled from the spawn-area footprint, but the resting height comes from the actual
 -- Ground part's surface (not the thin transparent LeafSpawnArea overlay) so leaves are
 -- planted on the grass instead of levitating on top of that overlay.
@@ -43,7 +63,7 @@ local function randomRestPosition()
 	for _ = 1, 10 do
 		local x = center.X + (math.random() - 0.5) * size.X
 		local z = center.Z + (math.random() - 0.5) * size.Z
-		if not isInAvoidRegion(x, z) then
+		if not isInAvoidRegion(x, z) and not isInCleanupZone(x, z) then
 			return Vector3.new(x, y, z)
 		end
 	end
@@ -88,6 +108,57 @@ local function despawnLeaf(leaf)
 		leaf:Destroy()
 	end)
 	tween:Play()
+end
+
+-- Fires a quick outward particle burst at a delivered leaf's position. Reuses one shared
+-- Part+ParticleEmitter (just repositioned each call) instead of creating/destroying an Instance
+-- per leaf -- with potentially thousands of leaves delivered per minute, that's the difference
+-- between "free" and a real cost. Emit() schedules its particles immediately and doesn't care that
+-- the emitter gets moved again right after, so this stays cheap even for a burst of deliveries in
+-- the same frame.
+local function playConsumeVFX(position)
+	if not consumeVFXPart then
+		return
+	end
+	-- Lifted slightly above the leaf/ground so the burst reads clearly instead of half-clipping
+	-- into the floor.
+	consumeVFXPart.CFrame = CFrame.new(position + Vector3.new(0, 0.4, 0))
+	consumeEmitter:Emit(18)
+	consumeFlashEmitter:Emit(1)
+end
+
+-- Drives the billboard progress bar: a repeating quota (0 -> 100% every CleanupZoneGoal leaves),
+-- not a lifetime total. Guards the delayed reset with a "still 0" check so a big batch of leaves
+-- completing several laps within the same reset delay can't have a stale reset from an earlier lap
+-- zero out a newer lap's already-in-progress fill.
+local function registerZoneProgress()
+	local goal = LeafConfig.CleanupZoneGoal
+	zoneCycleCount += 1
+	Workspace:SetAttribute("CleanupZoneCount", zoneCycleCount)
+	Workspace:SetAttribute("CleanupZoneProgress", math.min(zoneCycleCount / goal, 1))
+
+	if zoneCycleCount >= goal then
+		zoneCycleCount = 0
+		task.delay(LeafConfig.CleanupZoneResetDelay, function()
+			if zoneCycleCount == 0 then
+				Workspace:SetAttribute("CleanupZoneCount", 0)
+				Workspace:SetAttribute("CleanupZoneProgress", 0)
+			end
+		end)
+	end
+end
+
+-- A leaf "arriving" in the cleanup zone: untracked, VFX'd, and destroyed in one shot so it can
+-- never be double-counted (no lingering state anywhere still references it afterward). Increments
+-- the shared LeavesCleaned count -- exposed as a Workspace attribute for later steps (UI, rewards)
+-- to read without this module needing to know about players/coins yet.
+local function consumeLeaf(leaf, x, y, z)
+	restingLeaves[leaf] = nil
+	playConsumeVFX(Vector3.new(x, y, z))
+	leavesCleanedCount += 1
+	Workspace:SetAttribute("LeavesCleaned", leavesCleanedCount)
+	registerZoneProgress()
+	leaf:Destroy()
 end
 
 -- Scheduled once per leaf via task.delay (cheap engine-side timer, no per-frame polling) rather than
@@ -403,10 +474,14 @@ local function updateDisturbances(dt)
 		end
 
 		if t >= 1 then
-			state.rest.baseX = state.targetX
-			state.rest.baseZ = state.targetZ
-			state.rest.yaw = state.targetYaw
-			state.rest.disturbing = false
+			if isInCleanupZone(state.targetX, state.targetZ) then
+				consumeLeaf(state.part, state.targetX, state.rest.restY, state.targetZ)
+			else
+				state.rest.baseX = state.targetX
+				state.rest.baseZ = state.targetZ
+				state.rest.yaw = state.targetYaw
+				state.rest.disturbing = false
+			end
 			table.remove(disturbances, i)
 		end
 	end
@@ -577,8 +652,68 @@ function LeafSpawner.Start()
 	started = true
 
 	spawnArea = Workspace:WaitForChild("LeafSpawnArea")
+	cleanupZone = Workspace:WaitForChild("CleanupZone")
 	local ground = Workspace:WaitForChild("Ground")
 	groundTop = ground.Position.Y + ground.Size.Y / 2
+
+	-- Single reused VFX source for every leaf consumed by the cleanup zone -- see playConsumeVFX.
+	consumeVFXPart = Instance.new("Part")
+	consumeVFXPart.Name = "LeafConsumeVFX"
+	consumeVFXPart.Anchored = true
+	consumeVFXPart.CanCollide = false
+	consumeVFXPart.CanQuery = false
+	consumeVFXPart.CastShadow = false
+	consumeVFXPart.Transparency = 1
+	consumeVFXPart.Size = Vector3.new(0.2, 0.2, 0.2)
+	consumeVFXPart.CFrame = CFrame.new(cleanupZone.Position)
+	consumeVFXPart.Parent = Workspace
+
+	-- Bright sparkle burst, arcing outward/upward then falling -- color deliberately far from the
+	-- CleanupZone platform's own gold/orange tint (and from the leaves themselves) so it reads
+	-- clearly against both instead of blending in.
+	consumeEmitter = Instance.new("ParticleEmitter")
+	consumeEmitter.Name = "ConsumeBurst"
+	consumeEmitter.Enabled = false
+	consumeEmitter.Rate = 0
+	consumeEmitter.Lifetime = NumberRange.new(0.25, 0.45)
+	consumeEmitter.Speed = NumberRange.new(10, 18)
+	consumeEmitter.SpreadAngle = Vector2.new(55, 55)
+	consumeEmitter.Acceleration = Vector3.new(0, -28, 0)
+	consumeEmitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.5),
+		NumberSequenceKeypoint.new(0.5, 0.65),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	consumeEmitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(0.7, 0.1),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	consumeEmitter.Color = ColorSequence.new(Color3.fromRGB(150, 255, 190))
+	consumeEmitter.LightEmission = 1
+	consumeEmitter.LightInfluence = 0
+	consumeEmitter.Parent = consumeVFXPart
+
+	-- A single big, bright, near-instant flash layered under the sparkles -- the actual "pop" that
+	-- catches the eye even mid-blow when a dozen other leaves are moving on screen.
+	consumeFlashEmitter = Instance.new("ParticleEmitter")
+	consumeFlashEmitter.Name = "ConsumeFlash"
+	consumeFlashEmitter.Enabled = false
+	consumeFlashEmitter.Rate = 0
+	consumeFlashEmitter.Lifetime = NumberRange.new(0.18, 0.18)
+	consumeFlashEmitter.Speed = NumberRange.new(0, 0)
+	consumeFlashEmitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1.6),
+		NumberSequenceKeypoint.new(1, 3.4),
+	})
+	consumeFlashEmitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.25),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	consumeFlashEmitter.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+	consumeFlashEmitter.LightEmission = 1
+	consumeFlashEmitter.LightInfluence = 0
+	consumeFlashEmitter.Parent = consumeVFXPart
 
 	local leavesFolder = Instance.new("Folder")
 	leavesFolder.Name = "Leaves"

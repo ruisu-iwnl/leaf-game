@@ -66,6 +66,8 @@ return {
 	-- runs any time it's not actively blowing, whether the player let go or it force-stopped itself.
 	OverheatMax = 100,
 	HeatGainPerSecond = 11, -- ~9s of continuous blowing to hit the cap
-	HeatCoolPerSecond = 20, -- cools noticeably faster than it heats, so it recovers quickly
+	-- (OverheatMax - OverheatResumeThreshold) / HeatCoolPerSecond = how long the lockout actually
+	-- lasts once triggered -- tuned here for ~2.5s (85 / 34).
+	HeatCoolPerSecond = 34,
 	OverheatResumeThreshold = 15, -- must cool down to this (out of OverheatMax) before it can fire again
 }

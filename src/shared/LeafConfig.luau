@@ -110,4 +110,9 @@ return {
 	AvoidRegions = {
 		{ Center = Vector3.new(-32, 0, 20), Size = Vector3.new(18, 0, 16) },
 	},
+
+	-- Cleanup zone progress bar: cycles 0 -> 100% every this many delivered leaves, then resets to
+	-- 0 and starts filling again (a repeating quota, not a one-time lifetime total).
+	CleanupZoneGoal = 250,
+	CleanupZoneResetDelay = 0.4, -- seconds the bar holds at 100% before visibly snapping back to 0
 }
