@@ -254,6 +254,9 @@ local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
 local pickupAnimation
 local pickupTracks = setmetatable({}, { __mode = "k" }) -- Humanoid -> AnimationTrack, one load per character
 
+local tieSackAnimation
+local tieSackTracks = setmetatable({}, { __mode = "k" })
+
 local function buildPickupSequence()
 	local sequence = Instance.new("KeyframeSequence")
 	sequence.Name = "SackPickupGesture"
@@ -351,29 +354,60 @@ local function setupPickupAnimation()
 	pickupAnimation = animation
 end
 
-local function playPickupGesture(character)
-	if not pickupAnimation then
+-- Published as a real Animation asset via Studio's Clip Editor from the start (no Studio-only
+-- baking step needed, unlike the pickup gesture's history) -- see SackConfig.TieSackAnimationId.
+local function setupTieSackAnimation()
+	if SackConfig.TieSackAnimationId == "" then
 		return
 	end
+	local animation = Instance.new("Animation")
+	animation.Name = "SackTieGesture"
+	animation.AnimationId = SackConfig.TieSackAnimationId
+	tieSackAnimation = animation
+end
+
+-- Shared by both gestures (pickup and tie-off): one load per Humanoid, cached in `trackCache`.
+local function ensureTrack(humanoid, animation, trackCache)
+	if not animation then
+		return nil
+	end
+	local track = trackCache[humanoid]
+	if not track then
+		local loaded, newTrack = pcall(function()
+			return humanoid:LoadAnimation(animation)
+		end)
+		if not loaded then
+			return nil
+		end
+		newTrack.Priority = Enum.AnimationPriority.Action
+		trackCache[humanoid] = newTrack
+		track = newTrack
+	end
+	return track
+end
+
+local function playGesture(character, animation, trackCache)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then
 		return
 	end
-
-	local track = pickupTracks[humanoid]
-	if not track then
-		local loaded, newTrack = pcall(function()
-			return humanoid:LoadAnimation(pickupAnimation)
-		end)
-		if not loaded then
-			return
-		end
-		newTrack.Priority = Enum.AnimationPriority.Action
-		pickupTracks[humanoid] = newTrack
-		track = newTrack
+	local track = ensureTrack(humanoid, animation, trackCache)
+	if track then
+		track:Play(0.05)
 	end
+end
 
-	track:Play(0.05)
+-- LoadAnimation (creating the AnimationTrack) has a one-time cost of its own on top of the
+-- client's content download -- previously that only ever happened lazily on the very first actual
+-- gesture, the worst possible moment. Pre-creating both tracks the instant the character spawns
+-- gives it the maximum possible head start before the player can realistically reach a leaf.
+local function warmGestureTracks(character)
+	local humanoid = character:WaitForChild("Humanoid", 5)
+	if not humanoid then
+		return
+	end
+	ensureTrack(humanoid, pickupAnimation, pickupTracks)
+	ensureTrack(humanoid, tieSackAnimation, tieSackTracks)
 end
 
 local function onCollectLeaf(player, leaf)
@@ -401,7 +435,7 @@ local function onCollectLeaf(player, leaf)
 
 	if LeafSpawner.CollectLeaf(leaf) then
 		player:SetAttribute("SackStorage", storage + 1)
-		playPickupGesture(character)
+		playGesture(character, pickupAnimation, pickupTracks)
 	end
 end
 
@@ -429,6 +463,7 @@ local function onSpawnSack(player)
 	local tool = newSackTool(storage, finalPosition, player.UserId)
 	tool.Parent = Workspace
 	playSpawnPoofVFX(finalPosition)
+	playGesture(character, tieSackAnimation, tieSackTracks)
 
 	player:SetAttribute("SackStorage", 0)
 	player:SetAttribute("ActiveSackCount", activeSackCount + 1)
@@ -441,12 +476,18 @@ local function onPlayerAdded(player)
 	if player:GetAttribute("ActiveSackCount") == nil then
 		player:SetAttribute("ActiveSackCount", 0)
 	end
+
+	player.CharacterAdded:Connect(warmGestureTracks)
+	if player.Character then
+		warmGestureTracks(player.Character)
+	end
 end
 
 function SackSystem.Start()
 	cleanupZone = Workspace:WaitForChild("CleanupZone")
 	groundPart = Workspace:WaitForChild("Ground")
 	setupPickupAnimation()
+	setupTieSackAnimation()
 	setupPoofVFX()
 
 	remotes = ReplicatedStorage.Shared:FindFirstChild("Remotes")

@@ -24,4 +24,8 @@ return {
 	-- live server can use -- see SackSystem.luau's setupPickupAnimation). Works everywhere now,
 	-- Studio and the published game both, since this is a real permanent asset id.
 	PickupAnimationId = "rbxassetid://93781977036631",
+
+	-- Played on the player when they tie off/spawn a physical sack (SackSystem.onSpawnSack).
+	-- Same deal as PickupAnimationId -- a real published asset, works everywhere.
+	TieSackAnimationId = "rbxassetid://97341456512958",
 }
