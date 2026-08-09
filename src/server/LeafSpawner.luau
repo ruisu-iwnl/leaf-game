@@ -1,12 +1,28 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local LeafConfig = require(ReplicatedStorage.Shared.LeafConfig)
+local LeafMotion = require(ReplicatedStorage.Shared.LeafMotion)
 local WindConfig = require(ReplicatedStorage.Shared.WindConfig)
 
+-- Leaf motion (falling + wind/blower glides) used to be simulated server-side on a per-Heartbeat
+-- loop that wrote each moving leaf's CFrame directly, every tick, for the whole game to see via
+-- ordinary property replication. That looked smooth at low ping, but choppy/laggy at higher ping:
+-- Roblox doesn't interpolate Anchored-part CFrame changes the way it does physics-driven parts,
+-- so each client just snaps to whatever CFrame value last arrived, and a backlog of that much
+-- replication traffic (up to ~300 leaves updating 60x/second) arriving in a burst under high ping
+-- could stall a client's frame entirely, making everything else (UI tweens included) hitch too.
+--
+-- Now the server only decides WHEN and WHERE a leaf's motion happens (spawn/target position,
+-- duration, wind, obstacle bounces -- all unchanged) and replicates those PARAMETERS once, via
+-- Attributes, when the motion starts (see beginFall/startGlide). Each client then renders the
+-- actual frame-by-frame motion locally (LeafRenderer.luau), using the exact same math
+-- (LeafMotion.luau) and a server-synced clock (Workspace:GetServerTimeNow()) so playback is smooth
+-- regardless of ping -- latency only delays noticing a leaf started moving, never the smoothness
+-- of the motion itself. The server schedules each motion's end with a single task.delay instead of
+-- polling every leaf every frame, which is also just less server work overall.
 local LeafSpawner = {}
 
 local fallingFolder
@@ -19,10 +35,9 @@ local consumeEmitter
 local consumeFlashEmitter
 local leavesCleanedCount = 0
 local zoneCycleCount = 0
-local fallingLeaves = {}
+local fallingLeaves = {} -- part -> state, only leaves CURRENTLY falling (for the blower's mid-air redirect)
 local landedFalling = {}
 local restingLeaves = {} -- leaf -> { baseX, baseZ, restY, yaw, disturbing }
-local disturbances = {}
 local lastPlayerPositions = {} -- player -> Vector3, used to gate disturbance on actual movement
 local started = false
 local deliveryListeners = {}
@@ -251,85 +266,6 @@ local function scheduleFallingDespawn(leaf)
 	end)
 end
 
--- Kicks off a scripted (non-physics) fall: eased descent + wind-carried drift + sideways sway +
--- tumble, driven by one shared Heartbeat loop. The leaf's landing spot (restPosition) stays fixed
--- (already avoid-region-checked); wind instead offsets where it visually SPAWNS, upwind of that
--- landing spot, so it appears to be blown in from the current wind direction as it falls.
-local function beginFall(leaf, restPosition)
-	local fallHeight = LeafConfig.FallHeightMin + math.random() * (LeafConfig.FallHeightMax - LeafConfig.FallHeightMin)
-	local fallSpeed = LeafConfig.FallSpeedMin + math.random() * (LeafConfig.FallSpeedMax - LeafConfig.FallSpeedMin)
-	local duration = fallHeight / fallSpeed
-	local swayAmplitude = LeafConfig.SwayAmplitudeMin + math.random() * (LeafConfig.SwayAmplitudeMax - LeafConfig.SwayAmplitudeMin)
-	local tumbleAmplitude = math.rad(LeafConfig.TumbleAmplitudeDegreesMin + math.random() * (LeafConfig.TumbleAmplitudeDegreesMax - LeafConfig.TumbleAmplitudeDegreesMin))
-	local swayFreqX = 1.2 + math.random() * 1.3
-	local swayFreqZ = 1.2 + math.random() * 1.3
-	local flutterMult = LeafConfig.FlutterFreqMultiplierMin + math.random() * (LeafConfig.FlutterFreqMultiplierMax - LeafConfig.FlutterFreqMultiplierMin)
-
-	local windName = Workspace:GetAttribute("WindDirection")
-	local windVector = (windName and WindConfig.Vectors[windName]) or Vector3.new(0, 0, 0)
-	local driftVariance = LeafConfig.WindFallDriftVarianceMin + math.random() * (LeafConfig.WindFallDriftVarianceMax - LeafConfig.WindFallDriftVarianceMin)
-	local windDrift = LeafConfig.WindFallDriftPerSecond * duration * driftVariance
-	local spawnBaseX = restPosition.X - windVector.X * windDrift
-	local spawnBaseZ = restPosition.Z - windVector.Z * windDrift
-
-	local state = {
-		part = leaf,
-		baseX = restPosition.X,
-		baseZ = restPosition.Z,
-		spawnBaseX = spawnBaseX,
-		spawnBaseZ = spawnBaseZ,
-		restY = restPosition.Y,
-		spawnY = restPosition.Y + fallHeight,
-		duration = duration,
-		elapsed = 0,
-		swayAmplitude = swayAmplitude,
-		swayFreqX = swayFreqX,
-		swayFreqZ = swayFreqZ,
-		flutterFreqX = swayFreqX * flutterMult,
-		flutterFreqZ = swayFreqZ * flutterMult,
-		phaseX = math.random() * math.pi * 2,
-		phaseZ = math.random() * math.pi * 2,
-		flutterPhaseX = math.random() * math.pi * 2,
-		flutterPhaseZ = math.random() * math.pi * 2,
-		spinSpeed = (math.random() - 0.5) * 6,
-		tumbleAmplitude = tumbleAmplitude,
-		tumbleFreq = 1 + math.random() * 1.5,
-		initialYaw = math.rad(math.random(0, 360)),
-	}
-
-	leaf.CFrame = CFrame.new(spawnBaseX, state.spawnY, spawnBaseZ)
-	table.insert(fallingLeaves, state)
-end
-
--- Sway/tumble amplitude fades to exactly 0 as t approaches 1, so the leaf's swept path
--- naturally converges on (baseX, restY, baseZ) with no snap when it lands. The sway/flutter
--- itself orbits a wind anchor that glides from the upwind spawn point to the landing spot
--- (same easing as the vertical fall), so the whole trajectory reads as wind-carried.
-local function computeLeafCFrame(state, t)
-	local yEase = t * t * (3 - 2 * t)
-	local y = state.spawnY - (state.spawnY - state.restY) * yEase
-
-	local windAnchorX = state.spawnBaseX + (state.baseX - state.spawnBaseX) * yEase
-	local windAnchorZ = state.spawnBaseZ + (state.baseZ - state.spawnBaseZ) * yEase
-
-	local driftFactor = 1 - t
-	local flutterScale = LeafConfig.FlutterAmplitudeRatio
-
-	local swayX = math.sin(t * state.swayFreqX * math.pi * 2 + state.phaseX)
-	local flutterX = math.sin(t * state.flutterFreqX * math.pi * 2 + state.flutterPhaseX) * flutterScale
-	local x = windAnchorX + (swayX + flutterX) * state.swayAmplitude * driftFactor
-
-	local swayZ = math.cos(t * state.swayFreqZ * math.pi * 2 + state.phaseZ)
-	local flutterZ = math.cos(t * state.flutterFreqZ * math.pi * 2 + state.flutterPhaseZ) * flutterScale
-	local z = windAnchorZ + (swayZ + flutterZ) * state.swayAmplitude * driftFactor
-
-	local yaw = state.initialYaw + state.spinSpeed * state.elapsed
-	local tumbleX = math.sin(state.elapsed * state.tumbleFreq * math.pi * 2) * state.tumbleAmplitude * driftFactor
-	local tumbleZ = math.cos(state.elapsed * state.tumbleFreq * math.pi * 2 * 0.7) * state.tumbleAmplitude * driftFactor
-
-	return CFrame.new(x, y, z) * CFrame.Angles(tumbleX, yaw, tumbleZ)
-end
-
 -- If a glide's straight-line path would pass through solid geometry (a wall, fence, tree trunk),
 -- reflects the leaf off the surface normal instead of just stopping dead at it -- like a leaf
 -- actually deflecting off a wall rather than getting stuck against it. Raycast at roughly leaf
@@ -388,10 +324,135 @@ local function clampTargetForObstacles(fromX, fromZ, y, targetX, targetZ)
 	return targetX, targetZ
 end
 
+-- Small random per-landing height bump so a leaf landing wherever other leaves already are reads as
+-- settling into a pile instead of always lying dead flat. Reuses the same tuning range the initial
+-- ground clusters stack with, so a leaf that gets blown into an existing pile looks consistent with
+-- one that spawned there.
+--
+-- Baked directly into the replicated restY (FallRestY/GlideRestY) that the motion converges toward,
+-- NOT added after the fact to the final CFrame: the client renders every frame straight from those
+-- attributes (LeafRenderer.luau), so a bump applied only in the server's landing callback below would
+-- just get overwritten by the client's own next Heartbeat render. The leaf's tracked rest.restY (the
+-- flat, constant ground height used as the baseline for its NEXT glide) is deliberately never updated
+-- with this bump, so repeated moves can't make a leaf drift upward over a play session -- each landing
+-- rolls a fresh small bump off the same stable floor instead of stacking on the previous one.
+local function randomStackHeight()
+	return LeafConfig.GroundStackHeightMin + math.random() * (LeafConfig.GroundStackHeightMax - LeafConfig.GroundStackHeightMin)
+end
+
+-- Kicks off a scripted (non-physics) fall: eased descent + wind-carried drift + sideways sway +
+-- tumble. The leaf's landing spot (restPosition) stays fixed (already avoid-region-checked); wind
+-- instead offsets where it visually SPAWNS, upwind of that landing spot, so it appears to be blown
+-- in from the current wind direction as it falls.
+--
+-- The motion itself is replicated as PARAMETERS (Attributes), not a per-frame CFrame stream --
+-- clients render it locally via LeafMotion/LeafRenderer. This function only sets the leaf's
+-- starting pose directly; task.delay schedules the landing at the exact computed duration.
+local function beginFall(leaf, restPosition)
+	local fallHeight = LeafConfig.FallHeightMin + math.random() * (LeafConfig.FallHeightMax - LeafConfig.FallHeightMin)
+	local fallSpeed = LeafConfig.FallSpeedMin + math.random() * (LeafConfig.FallSpeedMax - LeafConfig.FallSpeedMin)
+	local duration = fallHeight / fallSpeed
+	local swayAmplitude = LeafConfig.SwayAmplitudeMin + math.random() * (LeafConfig.SwayAmplitudeMax - LeafConfig.SwayAmplitudeMin)
+	local tumbleAmplitude = math.rad(LeafConfig.TumbleAmplitudeDegreesMin + math.random() * (LeafConfig.TumbleAmplitudeDegreesMax - LeafConfig.TumbleAmplitudeDegreesMin))
+	local swayFreqX = 1.2 + math.random() * 1.3
+	local swayFreqZ = 1.2 + math.random() * 1.3
+	local flutterMult = LeafConfig.FlutterFreqMultiplierMin + math.random() * (LeafConfig.FlutterFreqMultiplierMax - LeafConfig.FlutterFreqMultiplierMin)
+
+	local windName = Workspace:GetAttribute("WindDirection")
+	local windVector = (windName and WindConfig.Vectors[windName]) or Vector3.new(0, 0, 0)
+	local driftVariance = LeafConfig.WindFallDriftVarianceMin + math.random() * (LeafConfig.WindFallDriftVarianceMax - LeafConfig.WindFallDriftVarianceMin)
+	local windDrift = LeafConfig.WindFallDriftPerSecond * duration * driftVariance
+	local spawnBaseX = restPosition.X - windVector.X * windDrift
+	local spawnBaseZ = restPosition.Z - windVector.Z * windDrift
+	local spawnY = restPosition.Y + fallHeight
+	-- The flat ground height plus a fresh random pile bump -- see randomStackHeight's comment.
+	local groundY = restPosition.Y
+	local restY = groundY + randomStackHeight()
+
+	-- Kept as the params table LeafMotion.ComputeFalling expects -- also what ApplyBlow mutates
+	-- (baseX/baseZ) to redirect a still-falling leaf caught in the blower's cone.
+	local state = {
+		part = leaf,
+		baseX = restPosition.X,
+		baseZ = restPosition.Z,
+		spawnBaseX = spawnBaseX,
+		spawnBaseZ = spawnBaseZ,
+		restY = restY,
+		spawnY = spawnY,
+		duration = duration,
+		swayAmplitude = swayAmplitude,
+		swayFreqX = swayFreqX,
+		swayFreqZ = swayFreqZ,
+		flutterFreqX = swayFreqX * flutterMult,
+		flutterFreqZ = swayFreqZ * flutterMult,
+		phaseX = math.random() * math.pi * 2,
+		phaseZ = math.random() * math.pi * 2,
+		flutterPhaseX = math.random() * math.pi * 2,
+		flutterPhaseZ = math.random() * math.pi * 2,
+		spinSpeed = (math.random() - 0.5) * 6,
+		tumbleAmplitude = tumbleAmplitude,
+		tumbleFreq = 1 + math.random() * 1.5,
+		initialYaw = math.rad(math.random(0, 360)),
+	}
+
+	leaf.CFrame = CFrame.new(spawnBaseX, spawnY, spawnBaseZ)
+
+	leaf:SetAttribute("FallSpawnX", spawnBaseX)
+	leaf:SetAttribute("FallSpawnY", spawnY)
+	leaf:SetAttribute("FallSpawnZ", spawnBaseZ)
+	leaf:SetAttribute("FallTargetX", state.baseX)
+	leaf:SetAttribute("FallTargetZ", state.baseZ)
+	leaf:SetAttribute("FallRestY", state.restY)
+	leaf:SetAttribute("FallSwayAmplitude", swayAmplitude)
+	leaf:SetAttribute("FallSwayFreqX", swayFreqX)
+	leaf:SetAttribute("FallSwayFreqZ", swayFreqZ)
+	leaf:SetAttribute("FallPhaseX", state.phaseX)
+	leaf:SetAttribute("FallPhaseZ", state.phaseZ)
+	leaf:SetAttribute("FallFlutterFreqX", state.flutterFreqX)
+	leaf:SetAttribute("FallFlutterFreqZ", state.flutterFreqZ)
+	leaf:SetAttribute("FallFlutterPhaseX", state.flutterPhaseX)
+	leaf:SetAttribute("FallFlutterPhaseZ", state.flutterPhaseZ)
+	leaf:SetAttribute("FallInitialYaw", state.initialYaw)
+	leaf:SetAttribute("FallSpinSpeed", state.spinSpeed)
+	leaf:SetAttribute("FallTumbleAmplitude", tumbleAmplitude)
+	leaf:SetAttribute("FallTumbleFreq", state.tumbleFreq)
+	leaf:SetAttribute("MotionDuration", duration)
+	leaf:SetAttribute("MotionKind", "Fall")
+	-- Set LAST: this is the one attribute clients watch to detect a new motion, so everything else
+	-- it needs is guaranteed to already be in place (same replication batch) by the time it fires.
+	leaf:SetAttribute("MotionStart", Workspace:GetServerTimeNow())
+
+	fallingLeaves[leaf] = state
+
+	task.delay(duration, function()
+		fallingLeaves[leaf] = nil
+		if not leaf.Parent then
+			return
+		end
+
+		local landedYaw = state.initialYaw + state.spinSpeed * duration
+		local finalCFrame = LeafMotion.ComputeFalling(state, duration)
+		leaf.CFrame = finalCFrame
+		-- Tracked at the stable, unbumped ground height (not finalCFrame's actual bumped Y) so this
+		-- leaf's NEXT glide keeps computing from a fixed baseline instead of drifting upward over
+		-- repeated moves. See randomStackHeight's comment.
+		markResting(leaf, Vector3.new(finalCFrame.Position.X, groundY, finalCFrame.Position.Z), landedYaw)
+
+		table.insert(landedFalling, leaf)
+		if #landedFalling > LeafConfig.FallingMaxLanded then
+			local oldest = table.remove(landedFalling, 1)
+			despawnLeaf(oldest)
+		end
+		scheduleFallingDespawn(leaf)
+	end)
+end
+
 -- Core "glide to a new resting spot" mechanic shared by the small footstep wind-disturbance nudge
 -- and the blower's much bigger push -- only the distance/duration/lift/spin differ between them.
 -- `player` (optional, nil for footstep nudges) is who gets credited with the coin reward if this
 -- glide happens to land the leaf in the cleanup zone.
+--
+-- Same replicate-parameters-once approach as beginFall -- see the top-of-file note.
 local function startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees, player)
 	targetX, targetZ = clampTargetForObstacles(rest.baseX, rest.baseZ, rest.restY, targetX, targetZ)
 
@@ -430,11 +491,14 @@ local function startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, sp
 	local peakTime = LeafConfig.GlidePeakTimeMin + math.random() * (LeafConfig.GlidePeakTimeMax - LeafConfig.GlidePeakTimeMin)
 	local fallExponent = LeafConfig.GlideFallExponentMin + math.random() * (LeafConfig.GlideFallExponentMax - LeafConfig.GlideFallExponentMin)
 
-	table.insert(disturbances, {
-		part = leaf,
-		rest = rest,
+	-- A fresh random pile bump for wherever this glide lands -- see randomStackHeight's comment.
+	-- rest.restY itself (the flat, constant ground height) is never modified, only read.
+	local landingRestY = rest.restY + randomStackHeight()
+
+	local params = {
 		startX = rest.baseX,
 		startZ = rest.baseZ,
+		restY = landingRestY,
 		targetX = targetX,
 		targetZ = targetZ,
 		startYaw = rest.yaw,
@@ -452,9 +516,48 @@ local function startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, sp
 		peakTime = peakTime,
 		fallExponent = fallExponent,
 		duration = duration,
-		elapsed = 0,
-		player = player,
-	})
+	}
+
+	leaf:SetAttribute("GlideStartX", params.startX)
+	leaf:SetAttribute("GlideStartZ", params.startZ)
+	leaf:SetAttribute("GlideRestY", params.restY)
+	leaf:SetAttribute("GlideTargetX", params.targetX)
+	leaf:SetAttribute("GlideTargetZ", params.targetZ)
+	leaf:SetAttribute("GlideStartYaw", params.startYaw)
+	leaf:SetAttribute("GlideTargetYaw", params.targetYaw)
+	leaf:SetAttribute("GlideLiftHeight", params.liftHeight)
+	leaf:SetAttribute("GlideTumbleAmplitude", params.tumbleAmplitude)
+	leaf:SetAttribute("GlideTumbleFreq", params.tumbleFreq)
+	leaf:SetAttribute("GlidePerpX", params.perpX)
+	leaf:SetAttribute("GlidePerpZ", params.perpZ)
+	leaf:SetAttribute("GlideSwayAmplitude", params.swayAmplitude)
+	leaf:SetAttribute("GlideSwayFreq", params.swayFreq)
+	leaf:SetAttribute("GlideSwayPhase", params.swayPhase)
+	leaf:SetAttribute("GlideFlutterFreq", params.flutterFreq)
+	leaf:SetAttribute("GlideFlutterPhase", params.flutterPhase)
+	leaf:SetAttribute("GlidePeakTime", params.peakTime)
+	leaf:SetAttribute("GlideFallExponent", params.fallExponent)
+	leaf:SetAttribute("MotionDuration", duration)
+	leaf:SetAttribute("MotionKind", "Glide")
+	-- Set LAST -- see the matching note in beginFall.
+	leaf:SetAttribute("MotionStart", Workspace:GetServerTimeNow())
+
+	task.delay(duration, function()
+		if isInCleanupZone(targetX, targetZ) then
+			consumeLeaf(leaf, targetX, rest.restY, targetZ, player)
+		else
+			if leaf.Parent then
+				-- landingRestY (baked into params.restY above) already carries this landing's pile
+				-- bump, so the leaf converges on it exactly -- matches what every client already
+				-- rendered on its own last frame, no extra write needed.
+				leaf.CFrame = LeafMotion.ComputeGlide(params, duration)
+			end
+			rest.baseX = targetX
+			rest.baseZ = targetZ
+			rest.yaw = params.targetYaw
+			rest.disturbing = false
+		end
+	end)
 end
 
 -- Pushes a resting leaf to an actual new spot a short distance away (not back to where it
@@ -505,85 +608,6 @@ local function blowRestingLeaf(leaf, rest, direction, blowConfig, player)
 	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees, player)
 end
 
--- Glides the leaf from its old spot to the new one, but not in a straight line: a perpendicular
--- sway (plus a faster flutter layered on top) sweeps it side to side, and the vertical motion is
--- asymmetric -- quick rise to a per-leaf peak, then a slow, lingering drift back down that only
--- settles right at the very end -- rather than a symmetric bounce, so it reads as featherweight
--- and caught in moving air rather than hopping directly from A to B. Everything (sway, flutter,
--- tumble) is scaled by the same envelope, so it's exactly 0 at the start/end -- it still lands
--- precisely on target, flat. Once it arrives, the leaf's resting position updates for good.
-local function updateDisturbances(dt)
-	for i = #disturbances, 1, -1 do
-		local state = disturbances[i]
-		state.elapsed += dt
-		local t = math.clamp(state.elapsed / state.duration, 0, 1)
-		local ease = t * t * (3 - 2 * t)
-
-		local envelope
-		if t <= state.peakTime then
-			envelope = math.sin((t / state.peakTime) * math.pi / 2)
-		else
-			local fallT = (t - state.peakTime) / (1 - state.peakTime)
-			envelope = (1 - fallT) ^ state.fallExponent
-		end
-
-		if state.part.Parent then
-			-- Driven by real elapsed seconds (not t, which is 0-1 over the whole glide) so the
-			-- sway/flutter rate stays consistent regardless of how long any given glide lasts.
-			local sway = (math.sin(state.elapsed * state.swayFreq * math.pi * 2 + state.swayPhase)
-				+ math.sin(state.elapsed * state.flutterFreq * math.pi * 2 + state.flutterPhase) * 0.4) * state.swayAmplitude * envelope
-
-			local x = state.startX + (state.targetX - state.startX) * ease + state.perpX * sway
-			local z = state.startZ + (state.targetZ - state.startZ) * ease + state.perpZ * sway
-
-			local verticalFlutter = math.sin(state.elapsed * state.flutterFreq * math.pi * 2 + state.flutterPhase + 1)
-				* state.liftHeight * LeafConfig.GlideVerticalFlutterRatio * envelope
-			local y = state.rest.restY + state.liftHeight * envelope + verticalFlutter
-
-			local yaw = state.startYaw + (state.targetYaw - state.startYaw) * ease
-			local tumbleX = math.sin(state.elapsed * state.tumbleFreq * math.pi * 2) * state.tumbleAmplitude * envelope
-			local tumbleZ = math.cos(state.elapsed * state.tumbleFreq * math.pi * 2 * 0.7) * state.tumbleAmplitude * envelope
-			state.part.CFrame = CFrame.new(x, y, z) * CFrame.Angles(tumbleX, yaw, tumbleZ)
-		end
-
-		if t >= 1 then
-			if isInCleanupZone(state.targetX, state.targetZ) then
-				consumeLeaf(state.part, state.targetX, state.rest.restY, state.targetZ, state.player)
-			else
-				state.rest.baseX = state.targetX
-				state.rest.baseZ = state.targetZ
-				state.rest.yaw = state.targetYaw
-				state.rest.disturbing = false
-			end
-			table.remove(disturbances, i)
-		end
-	end
-end
-
-local function updateFallingLeaves(dt)
-	for i = #fallingLeaves, 1, -1 do
-		local state = fallingLeaves[i]
-		state.elapsed += dt
-		local t = math.clamp(state.elapsed / state.duration, 0, 1)
-
-		state.part.CFrame = computeLeafCFrame(state, t)
-
-		if t >= 1 then
-			table.remove(fallingLeaves, i)
-
-			local landedYaw = state.initialYaw + state.spinSpeed * state.elapsed
-			markResting(state.part, Vector3.new(state.baseX, state.restY, state.baseZ), landedYaw)
-
-			table.insert(landedFalling, state.part)
-			if #landedFalling > LeafConfig.FallingMaxLanded then
-				local oldest = table.remove(landedFalling, 1)
-				despawnLeaf(oldest)
-			end
-			scheduleFallingDespawn(state.part)
-		end
-	end
-end
-
 -- Hysteresis refill: fills up to FallingTargetCount then pauses, and only starts topping up
 -- again once the total on-map count drops to FallingResumeBelow (via natural despawns, or later,
 -- players clearing leaves at the cleanup zone). Avoids both "stuck at cap forever" and "never stops".
@@ -598,11 +622,16 @@ local function runFallingSpawnLoop()
 			refilling = true
 		end
 
-		if refilling and #fallingLeaves < LeafConfig.FallingMaxConcurrent then
+		local fallingCount = 0
+		for _ in pairs(fallingLeaves) do
+			fallingCount += 1
+		end
+
+		if refilling and fallingCount < LeafConfig.FallingMaxConcurrent then
 			local toSpawn = math.min(
 				LeafConfig.FallingSpawnBatchSize,
 				LeafConfig.FallingTargetCount - currentTotal,
-				LeafConfig.FallingMaxConcurrent - #fallingLeaves
+				LeafConfig.FallingMaxConcurrent - fallingCount
 			)
 			for _ = 1, math.max(toSpawn, 0) do
 				local restPosition = randomRestPosition()
@@ -616,24 +645,49 @@ local function runFallingSpawnLoop()
 	end
 end
 
--- Places a leaf directly at rest with a random yaw, no fall animation, for ambient ground clutter.
-local function spawnGroundLeaf()
-	local restPosition = randomRestPosition()
-	local leaf = createLeaf(restPosition)
-	local yaw = math.rad(math.random(0, 360))
-	leaf.CFrame = CFrame.new(restPosition) * CFrame.Angles(0, yaw, 0)
-	leaf.Parent = groundFolder
-	markResting(leaf, restPosition, yaw)
-	scheduleDespawn(leaf, LeafConfig.GroundLifetimeMin, LeafConfig.GroundLifetimeMax)
+-- Places a small pile of leaves clustered around one random ground spot, each stacked a little
+-- higher than the last (not one flat leaf) -- reads as a real pile at a glance without any actual
+-- physics: every leaf is still Anchored/non-colliding, the "stacking" is just deliberate Y offsets
+-- baked in once at spawn time, same as any other resting leaf otherwise (fully collectible/blowable).
+local function spawnGroundCluster()
+	local center = randomRestPosition()
+	local stackHeight = 0
+
+	for _ = 1, LeafConfig.GroundClusterSize do
+		local angle = math.random() * math.pi * 2
+		local radius = math.random() * LeafConfig.GroundClusterRadius
+		local x = center.X + math.cos(angle) * radius
+		local z = center.Z + math.sin(angle) * radius
+		stackHeight += LeafConfig.GroundStackHeightMin + math.random() * (LeafConfig.GroundStackHeightMax - LeafConfig.GroundStackHeightMin)
+		local restPosition = Vector3.new(x, center.Y + stackHeight, z)
+
+		local leaf = createLeaf(restPosition)
+		local yaw = math.rad(math.random(0, 360))
+		leaf.CFrame = CFrame.new(restPosition) * CFrame.Angles(0, yaw, 0)
+		leaf.Parent = groundFolder
+		markResting(leaf, restPosition, yaw)
+		scheduleDespawn(leaf, LeafConfig.GroundLifetimeMin, LeafConfig.GroundLifetimeMax)
+	end
 end
 
+-- Same hysteresis idea as runFallingSpawnLoop: fills up to GroundMaxLeaves then pauses, and only
+-- resumes once the on-map total has actually dropped to GroundResumeBelow.
 local function runGroundSpawnLoop()
+	local refilling = true
 	while true do
 		local currentCount = #groundFolder:GetChildren()
-		if currentCount < LeafConfig.GroundMaxLeaves then
-			local toSpawn = math.min(LeafConfig.GroundSpawnBatchSize, LeafConfig.GroundMaxLeaves - currentCount)
-			for _ = 1, toSpawn do
-				spawnGroundLeaf()
+
+		if refilling and currentCount >= LeafConfig.GroundMaxLeaves then
+			refilling = false
+		elseif not refilling and currentCount <= LeafConfig.GroundResumeBelow then
+			refilling = true
+		end
+
+		if refilling then
+			local remaining = LeafConfig.GroundMaxLeaves - currentCount
+			local clustersToSpawn = math.min(LeafConfig.GroundSpawnBatchSize, math.ceil(remaining / LeafConfig.GroundClusterSize))
+			for _ = 1, math.max(clustersToSpawn, 0) do
+				spawnGroundCluster()
 			end
 		end
 		task.wait(LeafConfig.GroundSpawnInterval)
@@ -699,7 +753,7 @@ function LeafSpawner.ApplyBlow(player, origin, direction, blowConfig)
 		end
 	end
 
-	for _, state in ipairs(fallingLeaves) do
+	for leaf, state in pairs(fallingLeaves) do
 		local toLeafX = state.baseX - origin.X
 		local toLeafZ = state.baseZ - origin.Z
 		local distance = math.sqrt(toLeafX * toLeafX + toLeafZ * toLeafZ)
@@ -714,6 +768,11 @@ function LeafSpawner.ApplyBlow(player, origin, direction, blowConfig)
 				if not isInAvoidRegion(newX, newZ) then
 					state.baseX = newX
 					state.baseZ = newZ
+					-- Re-replicate the redirected target so clients mid-render pick up the change
+					-- live -- see LeafRenderer.luau, which reads these fresh every frame rather
+					-- than caching them at motion start.
+					leaf:SetAttribute("FallTargetX", newX)
+					leaf:SetAttribute("FallTargetZ", newZ)
 				end
 			end
 		end
@@ -801,11 +860,6 @@ function LeafSpawner.Start()
 	groundFolder = Instance.new("Folder")
 	groundFolder.Name = "Ground"
 	groundFolder.Parent = leavesFolder
-
-	RunService.Heartbeat:Connect(function(dt)
-		updateFallingLeaves(dt)
-		updateDisturbances(dt)
-	end)
 
 	task.spawn(runFallingSpawnLoop)
 	task.spawn(runGroundSpawnLoop)

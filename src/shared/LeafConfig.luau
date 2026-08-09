@@ -38,11 +38,25 @@ return {
 	TumbleAmplitudeDegreesMin = 35,
 	TumbleAmplitudeDegreesMax = 65,
 
-	-- Leaves placed directly on the ground (no fall animation) to keep the yard looking
-	-- lived-in from the start. Long-lived compared to the falling ones.
-	GroundMaxLeaves = 200,
-	GroundSpawnInterval = 0.3,
-	GroundSpawnBatchSize = 10,
+	-- Leaves placed directly on the ground (no fall animation) to keep the yard looking properly
+	-- buried in leaves. Spawned in small clustered PILES (not one flat scatter) with each leaf in
+	-- a pile stacked a little higher than the last -- reads as a real pile without any actual
+	-- physics/collision (every leaf stays Anchored and non-colliding; see LeafSpawner.luau's
+	-- top-of-file note on why real per-leaf collision at this scale isn't worth the performance
+	-- risk -- thousands of unanchored parts settling into each other is one of the more reliable
+	-- ways to tank a Roblox server). Long-lived compared to the falling ones.
+	-- Hysteresis pair (same pattern as Falling*TargetCount/ResumeBelow below): fills up to
+	-- GroundMaxLeaves then pauses, only resuming once natural depletion (collection/blowing into
+	-- the zone) drops the on-map total to GroundResumeBelow -- so the yard never gets thinner than
+	-- that floor for long, but also isn't constantly re-topping-up to the hard cap.
+	GroundMaxLeaves = 11000,
+	GroundResumeBelow = 6000,
+	GroundClusterSize = 8, -- leaves per pile
+	GroundClusterRadius = 1.3, -- how tightly a pile's leaves scatter around its center, studs
+	GroundStackHeightMin = 0.02, -- per-leaf Y increment within a pile, studs
+	GroundStackHeightMax = 0.05,
+	GroundSpawnInterval = 0.05,
+	GroundSpawnBatchSize = 10, -- PILES (not individual leaves) spawned per loop tick
 	GroundLifetimeMin = 300,
 	GroundLifetimeMax = 600,
 
