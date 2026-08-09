@@ -1,74 +1,79 @@
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 
 local PerformanceMode = require(script.Parent.PerformanceMode)
+local TopBar = require(script.Parent.TopBar)
 
+-- Same autumn-toned rounded-panel look as InventoryUI/PlayerListUI (dark brown, tan stroke,
+-- FredokaOne) instead of the old generic dark-gray/Gotham modal, so all of this project's custom
+-- panels read as one consistent design.
 local SettingsUI = {}
 
-local ON_COLOR = Color3.fromRGB(76, 175, 80)
-local OFF_COLOR = Color3.fromRGB(80, 80, 80)
+local PANEL_COLOR = Color3.fromRGB(58, 34, 20)
+local PANEL_TRANSPARENCY = 0.08
+local STROKE_COLOR = Color3.fromRGB(210, 150, 80)
+local ON_COLOR = Color3.fromRGB(255, 205, 60)
+local OFF_COLOR = Color3.fromRGB(90, 58, 36)
 
 local function buildUI()
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
+
+	-- The gear button itself lives in TopBar.luau, shared with CoinsUI, so the two can never end
+	-- up overlapping regardless of how wide the Coins number gets -- this module only wires up
+	-- what happens when it's clicked.
+	local gearButton = TopBar.Build().gearButton
 
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "SettingsUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
 
-	local gearButton = Instance.new("TextButton")
-	gearButton.Name = "GearButton"
-	gearButton.AnchorPoint = Vector2.new(0, 0.5)
-	gearButton.Position = UDim2.new(0, 20, 0.5, 0)
-	gearButton.Size = UDim2.new(0, 44, 0, 44)
-	gearButton.BackgroundColor3 = Color3.new(0, 0, 0)
-	gearButton.BackgroundTransparency = 0.5
-	gearButton.AutoButtonColor = false
-	gearButton.Font = Enum.Font.GothamBold
-	gearButton.Text = "⚙"
-	gearButton.TextScaled = true
-	gearButton.TextColor3 = Color3.new(1, 1, 1)
-	gearButton.Parent = screenGui
-
-	local gearCorner = Instance.new("UICorner")
-	gearCorner.CornerRadius = UDim.new(1, 0)
-	gearCorner.Parent = gearButton
-
-	-- Backdrop doubles as a click-outside-to-close button.
-	local backdrop = Instance.new("TextButton")
+	-- Purely a visual dimmer + input blocker for the 3D world behind it -- NOT a button. Closing
+	-- on an outside click is handled by an explicit screen-bounds check (see SettingsUI.Start),
+	-- not click passthrough/Active chains -- those turned out unreliable for nested
+	-- Backdrop -> Panel -> content buttons (a click on the toggle also reaching Backdrop's own
+	-- click handler and closing the panel immediately, discovered and fixed in InventoryUI).
+	local backdrop = Instance.new("Frame")
 	backdrop.Name = "Backdrop"
+	backdrop.Active = true
 	backdrop.Size = UDim2.new(1, 0, 1, 0)
 	backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
 	backdrop.BackgroundTransparency = 0.5
-	backdrop.AutoButtonColor = false
-	backdrop.Text = ""
 	backdrop.Visible = false
 	backdrop.ZIndex = 10
 	backdrop.Parent = screenGui
 
 	local panel = Instance.new("Frame")
 	panel.Name = "Panel"
-	panel.Active = true -- blocks clicks from passing through to the backdrop underneath
+	panel.Active = true
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.new(0.5, 0, 0.5, 0)
-	panel.Size = UDim2.new(0, 260, 0, 130)
-	panel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	panel.Size = UDim2.new(0, 280, 0, 140)
+	panel.BackgroundColor3 = PANEL_COLOR
+	panel.BackgroundTransparency = PANEL_TRANSPARENCY
 	panel.BorderSizePixel = 0
 	panel.ZIndex = 11
 	panel.Parent = backdrop
 
 	local panelCorner = Instance.new("UICorner")
-	panelCorner.CornerRadius = UDim.new(0, 12)
+	panelCorner.CornerRadius = UDim.new(0, 16)
 	panelCorner.Parent = panel
+
+	local panelStroke = Instance.new("UIStroke")
+	panelStroke.Color = STROKE_COLOR
+	panelStroke.Transparency = 0.35
+	panelStroke.Thickness = 1.5
+	panelStroke.Parent = panel
 
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.BackgroundTransparency = 1
-	title.Size = UDim2.new(1, -50, 0, 30)
-	title.Position = UDim2.new(0, 14, 0, 10)
-	title.Font = Enum.Font.GothamBold
+	title.Size = UDim2.new(1, -50, 0, 26)
+	title.Position = UDim2.new(0, 18, 0, 16)
+	title.Font = Enum.Font.FredokaOne
 	title.Text = "Settings"
-	title.TextScaled = true
+	title.TextSize = 22
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.TextColor3 = Color3.new(1, 1, 1)
 	title.ZIndex = 12
@@ -77,13 +82,13 @@ local function buildUI()
 	local closeButton = Instance.new("TextButton")
 	closeButton.Name = "CloseButton"
 	closeButton.AnchorPoint = Vector2.new(1, 0)
-	closeButton.Position = UDim2.new(1, -8, 0, 8)
+	closeButton.Position = UDim2.new(1, -12, 0, 12)
 	closeButton.Size = UDim2.new(0, 28, 0, 28)
 	closeButton.BackgroundTransparency = 1
 	closeButton.AutoButtonColor = false
-	closeButton.Font = Enum.Font.GothamBold
+	closeButton.Font = Enum.Font.FredokaOne
 	closeButton.Text = "X"
-	closeButton.TextScaled = true
+	closeButton.TextSize = 18
 	closeButton.TextColor3 = Color3.new(1, 1, 1)
 	closeButton.ZIndex = 12
 	closeButton.Parent = panel
@@ -91,8 +96,8 @@ local function buildUI()
 	local row = Instance.new("Frame")
 	row.Name = "FastModeRow"
 	row.BackgroundTransparency = 1
-	row.Size = UDim2.new(1, -28, 0, 36)
-	row.Position = UDim2.new(0, 14, 0, 60)
+	row.Size = UDim2.new(1, -36, 0, 36)
+	row.Position = UDim2.new(0, 18, 0, 70)
 	row.ZIndex = 12
 	row.Parent = panel
 
@@ -100,9 +105,9 @@ local function buildUI()
 	label.Name = "Label"
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.new(0.6, 0, 1, 0)
-	label.Font = Enum.Font.Gotham
+	label.Font = Enum.Font.FredokaOne
 	label.Text = "Fast Mode"
-	label.TextScaled = true
+	label.TextSize = 18
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.ZIndex = 12
@@ -123,6 +128,12 @@ local function buildUI()
 	trackCorner.CornerRadius = UDim.new(1, 0)
 	trackCorner.Parent = toggleTrack
 
+	local trackStroke = Instance.new("UIStroke")
+	trackStroke.Color = STROKE_COLOR
+	trackStroke.Transparency = 0.5
+	trackStroke.Thickness = 1.25
+	trackStroke.Parent = toggleTrack
+
 	local knob = Instance.new("Frame")
 	knob.Name = "Knob"
 	knob.AnchorPoint = Vector2.new(0, 0.5)
@@ -138,7 +149,7 @@ local function buildUI()
 
 	screenGui.Parent = playerGui
 
-	return gearButton, backdrop, closeButton, toggleTrack, knob
+	return gearButton, backdrop, panel, closeButton, toggleTrack, knob
 end
 
 local function setToggleVisual(toggleTrack, knob, isOn)
@@ -148,20 +159,48 @@ local function setToggleVisual(toggleTrack, knob, isOn)
 end
 
 function SettingsUI.Start()
-	local gearButton, backdrop, closeButton, toggleTrack, knob = buildUI()
+	local gearButton, backdrop, panel, closeButton, toggleTrack, knob = buildUI()
 
 	local isOn = PerformanceMode.IsEnabled()
 	setToggleVisual(toggleTrack, knob, isOn)
 
-	local function closeModal()
-		backdrop.Visible = false
+	local outsideClickConn = nil
+
+	local function pointInside(guiObject, screenPos)
+		local topLeft = guiObject.AbsolutePosition
+		local size = guiObject.AbsoluteSize
+		return screenPos.X >= topLeft.X and screenPos.X <= topLeft.X + size.X
+			and screenPos.Y >= topLeft.Y and screenPos.Y <= topLeft.Y + size.Y
 	end
 
-	gearButton.MouseButton1Click:Connect(function()
+	local function closeModal()
+		backdrop.Visible = false
+		if outsideClickConn then
+			outsideClickConn:Disconnect()
+			outsideClickConn = nil
+		end
+	end
+
+	local function openModal()
 		backdrop.Visible = true
-	end)
+		-- Explicit screen-bounds check instead of click passthrough -- see the Backdrop comment
+		-- in buildUI for why.
+		if not outsideClickConn then
+			outsideClickConn = UserInputService.InputBegan:Connect(function(input)
+				if input.UserInputType ~= Enum.UserInputType.MouseButton1
+					and input.UserInputType ~= Enum.UserInputType.Touch then
+					return
+				end
+				local pos = input.Position
+				if not pointInside(panel, pos) and not pointInside(gearButton, pos) then
+					closeModal()
+				end
+			end)
+		end
+	end
+
+	gearButton.MouseButton1Click:Connect(openModal)
 	closeButton.MouseButton1Click:Connect(closeModal)
-	backdrop.MouseButton1Click:Connect(closeModal)
 
 	toggleTrack.MouseButton1Click:Connect(function()
 		isOn = not isOn
