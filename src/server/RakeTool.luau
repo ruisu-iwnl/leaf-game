@@ -314,6 +314,21 @@ local function onPlayerAdded(player)
 	end
 end
 
+-- Called by PurchaseSystem's EquipCosmetic handler right after a skin change is validated -- repaints
+-- the rake itself (whether it's currently equipped or just sitting in the Backpack) so a skin swap
+-- is visible immediately instead of only on the next equip.
+function RakeTool.RefreshCosmetic(player)
+	local character = player.Character
+	local tool = character and character:FindFirstChild(TOOL_NAME)
+	if not tool then
+		local backpack = player:FindFirstChild("Backpack")
+		tool = backpack and backpack:FindFirstChild(TOOL_NAME)
+	end
+	if tool then
+		applyCosmetic(tool, player)
+	end
+end
+
 function RakeTool.Start()
 	if not StarterPack:FindFirstChild(TOOL_NAME) then
 		buildTool().Parent = StarterPack

@@ -2,9 +2,11 @@ local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local BlowerTool = require(script.Parent.BlowerTool)
 local LeavesCleanedStat = require(script.Parent.LeavesCleanedStat)
 local MoneySystem = require(script.Parent.MoneySystem)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
+local RakeTool = require(script.Parent.RakeTool)
 local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
 local SackSystem = require(script.Parent.SackSystem)
 
@@ -86,6 +88,11 @@ local function loadPlayerData(player)
 			PlayerUpgrades.GrantPerk(player, id)
 		end
 	end
+	if typeof(result.CosmeticIds) == "table" then
+		for _, id in ipairs(result.CosmeticIds) do
+			PlayerUpgrades.GrantCosmetic(player, id)
+		end
+	end
 	if typeof(result.Cosmetics) == "table" then
 		for toolName, cosmeticId in pairs(result.Cosmetics) do
 			if typeof(toolName) == "string" and typeof(cosmeticId) == "string" then
@@ -93,6 +100,19 @@ local function loadPlayerData(player)
 			end
 		end
 	end
+
+	-- Re-applies the now-restored cosmetics to whatever's already in the world for this player.
+	-- Without this, a rejoining player's ALWAYS-WORN Blower backpack prop could permanently end up
+	-- on the wrong skin: BlowerTool's attachBackpack resolves + bakes in colors once, the very first
+	-- time the backpack is built after a character spawns, and never revisits it again -- if that
+	-- happens to run (character spawns) before this GetAsync call above finishes yielding, it reads
+	-- the not-yet-restored default cosmetic and is stuck there until the player re-equips a skin in
+	-- the store. RefreshCosmetic is the exact same fix PurchaseSystem's EquipCosmetic already uses
+	-- for a live skin change; calling it again here just closes this one race at load time. A no-op
+	-- if the character hasn't spawned yet -- in that case attachBackpack hasn't run either, and will
+	-- correctly pick up the now-restored cosmetic on its own once it does.
+	BlowerTool.RefreshCosmetic(player)
+	RakeTool.RefreshCosmetic(player)
 end
 
 local function savePlayerData(player)
@@ -103,6 +123,7 @@ local function savePlayerData(player)
 		SackLeafCounts = SackSystem.GetPlayerSackLeafCounts(player),
 		UpgradeIds = PlayerUpgrades.GetOwnedUpgradeIds(player),
 		PerkIds = PlayerUpgrades.GetOwnedPerkIds(player),
+		CosmeticIds = PlayerUpgrades.GetOwnedCosmeticIds(player),
 		Cosmetics = PlayerUpgrades.GetCosmetics(player),
 	}
 	local ok, err = pcall(function()

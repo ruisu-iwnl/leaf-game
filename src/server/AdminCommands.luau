@@ -4,6 +4,7 @@ local RunService = game:GetService("RunService")
 local TextChatService = game:GetService("TextChatService")
 
 local AdminConfig = require(ReplicatedStorage.Shared.AdminConfig)
+local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
 local MoneySystem = require(script.Parent.MoneySystem)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
@@ -214,6 +215,34 @@ commands.removeperk = function(admin, args)
 	print(string.format("[Admin] %s removed %s's %s perk", admin.Name, target.Name, id))
 end
 
+commands.addcosmetic = function(admin, args)
+	local target = resolveTarget(admin, args[1])
+	if not target then
+		return
+	end
+	local id = findCatalogId(CosmeticConfig, args[2])
+	if not id then
+		warn(string.format("[Admin] usage: :addcosmetic <player|me> <id>. Known ids: %s", catalogIdList(CosmeticConfig)))
+		return
+	end
+	PlayerUpgrades.GrantCosmetic(target, id)
+	print(string.format("[Admin] %s granted %s the %s cosmetic", admin.Name, target.Name, id))
+end
+
+commands.removecosmetic = function(admin, args)
+	local target = resolveTarget(admin, args[1])
+	if not target then
+		return
+	end
+	local id = findCatalogId(CosmeticConfig, args[2])
+	if not id then
+		warn(string.format("[Admin] usage: :removecosmetic <player|me> <id>. Known ids: %s", catalogIdList(CosmeticConfig)))
+		return
+	end
+	PlayerUpgrades.RemoveCosmetic(target, id)
+	print(string.format("[Admin] %s removed %s's %s cosmetic", admin.Name, target.Name, id))
+end
+
 -- Shared by both the RemoteEvent path and the (bonus, possibly-inert) chat listeners below.
 local function runCommand(player, message)
 	if message:sub(1, #AdminConfig.CommandPrefix) ~= AdminConfig.CommandPrefix then
@@ -285,7 +314,7 @@ function AdminCommands.Start()
 		onPlayerAdded(player)
 	end
 
-	print("[Admin] AdminCommands ready -- press the / key in-game to open the command bar")
+	print("[Admin] AdminCommands ready -- press the ` (backtick) key in-game to open the command bar")
 end
 
 return AdminCommands

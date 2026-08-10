@@ -8,7 +8,7 @@ return {
 		Id = "RakeCooldown",
 		Name = "Fast Rake",
 		Description = "Decreases the rake's cooldown to 1 second.",
-		Price = 250,
+		Price = 1000,
 		Tool = "LeafRake",
 		Overrides = {
 			RakeCooldownDuration = 1,
@@ -19,7 +19,7 @@ return {
 		Id = "BlowerOverheat",
 		Name = "Bigger Tank",
 		Description = "Increases how long the blower can run before overheating.",
-		Price = 250,
+		Price = 1000,
 		Tool = "LeafBlower",
 		Overrides = {
 			OverheatMax = 150, -- was 100 -- roughly 50% more time before overheating
@@ -30,7 +30,7 @@ return {
 		Id = "SackCapacity",
 		Name = "Extra Sack",
 		Description = "Lets you have one more sack active at once.",
-		Price = 250,
+		Price = 1000,
 		Tool = "LeafSack",
 		Overrides = {
 			MaxActiveSacks = 4, -- was 3

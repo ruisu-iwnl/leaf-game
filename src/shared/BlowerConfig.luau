@@ -9,6 +9,16 @@ return {
 			GripColor = Color3.fromRGB(40, 40, 40),
 			NozzleColor = Color3.fromRGB(60, 60, 60),
 		},
+		BlowerCrimson = {
+			BodyColor = Color3.fromRGB(165, 30, 30),
+			GripColor = Color3.fromRGB(35, 30, 30),
+			NozzleColor = Color3.fromRGB(50, 45, 45),
+		},
+		BlowerEvergreen = {
+			BodyColor = Color3.fromRGB(35, 110, 55),
+			GripColor = Color3.fromRGB(35, 40, 35),
+			NozzleColor = Color3.fromRGB(55, 60, 55),
+		},
 	},
 
 	BodySize = Vector3.new(0.9, 0.9, 2.2),

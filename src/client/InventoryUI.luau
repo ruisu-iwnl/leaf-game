@@ -1,15 +1,18 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local PanelMotion = require(script.Parent.PanelMotion)
+local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
 local ToolIcons = require(script.Parent.ToolIcons)
 local UILayout = require(script.Parent.UILayout)
 
 -- A custom "Inventory" panel showing everything the player currently owns/carries (right now:
--- the Blower and, if they're holding one, a Sack), their Coins balance, and a reserved "Active
--- Perks" row for whenever gamepasses/upgrades actually grant perks -- opened via a backpack-
--- shaped button sitting just above the hotbar.
+-- the Blower and, if they're holding one, a Sack), their Coins balance, and an "Active Perks" row
+-- showing every perk actually owned (read straight off the Player's own replicated Perk_<id>
+-- Attributes, same as StorePanelUI does -- no server module needed client-side for this) -- opened
+-- via a backpack-shaped button sitting just above the hotbar.
 --
 -- Item icons use the SAME ToolIcons module/shapes as HotbarUI (ToolIcons.luau sets their ZIndex
 -- to 100, well above any card), so the Blower/Sack look identical in both places.
@@ -237,6 +240,56 @@ local function buildSlotCard(parent, layoutOrder, size, tool)
 	return card, stroke, nameLabel
 end
 
+-- Same visual language as an empty/filled item slot (buildSlotCard) -- outlined box, filled + gold
+-- "active" stroke when owned -- but perks aren't Tool instances with a real 3D model to build an
+-- icon from, so this just centers the perk's compact ShortLabel text instead. Not clickable --
+-- nothing to toggle, a perk is just always-on once owned.
+local function buildPerkSlotCard(parent, layoutOrder, size, perk)
+	local card = Instance.new("Frame")
+	card.Name = "PerkSlot" .. layoutOrder
+	card.LayoutOrder = layoutOrder
+	card.Size = UDim2.new(0, size, 0, size)
+	card.BorderSizePixel = 0
+	card.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = card
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 1.5
+	stroke.Parent = card
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.new(0.5, 0, 0.5, 0)
+	label.Size = UDim2.new(1, -8, 1, -8)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.ZIndex = 12
+	label.Parent = card
+
+	if perk then
+		card.BackgroundColor3 = FILLED_CARD_COLOR
+		card.BackgroundTransparency = 0
+		stroke.Color = EQUIPPED_STROKE
+		stroke.Transparency = 0.1
+		stroke.Thickness = 2
+		label.Text = perk.ShortLabel or perk.Name
+	else
+		card.BackgroundColor3 = EMPTY_CARD_COLOR
+		card.BackgroundTransparency = 0.35
+		stroke.Color = CARD_STROKE
+		stroke.Transparency = 0.45
+		label.Text = ""
+	end
+
+	return card, stroke
+end
+
 local function buildUI()
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
@@ -408,8 +461,6 @@ local function buildUI()
 		}
 	end
 
-	-- Reserved for whenever gamepasses/upgrades actually grant perks -- always shown empty for
-	-- now, same visual language as an empty item slot, just smaller and unclickable.
 	buildSectionLabel(panel, PERKS_LABEL_Y, "Active Perks")
 
 	local perksRow = Instance.new("Frame")
@@ -426,21 +477,38 @@ local function buildUI()
 	perksLayout.Padding = UDim.new(0, PERK_SLOT_PADDING)
 	perksLayout.Parent = perksRow
 
+	local perkSlots = {}
 	for i = 1, PERK_SLOT_COUNT do
-		buildSlotCard(perksRow, i, PERK_SLOT_SIZE, nil)
+		local card, stroke = buildPerkSlotCard(perksRow, i, PERK_SLOT_SIZE, nil)
+		perkSlots[i] = {
+			parent = perksRow,
+			layoutOrder = i,
+			card = card,
+			stroke = stroke,
+			perkId = nil,
+		}
 	end
 
 	screenGui.Parent = playerGui
-	return button, backdrop, panel, closeButton, slots, coinsLabel
+	return button, backdrop, panel, closeButton, slots, perkSlots, coinsLabel
 end
 
 function InventoryUI.Start()
 	local player = Players.LocalPlayer
-	local button, backdrop, panel, closeButton, slots, coinsLabel = buildUI()
+	local button, backdrop, panel, closeButton, slots, perkSlots, coinsLabel = buildUI()
 	local motion = PanelMotion.new(panel, backdrop)
 
 	local leaderstats = player:WaitForChild("leaderstats")
 	local coins = leaderstats:WaitForChild("Coins")
+
+	-- Sorted once (the catalog doesn't change at runtime) so slot order stays stable across
+	-- refreshes instead of shuffling with Lua's unspecified pairs() order -- same reasoning as
+	-- StorePanelUI's own upgradeIds/perkIds.
+	local perkIds = {}
+	for id in pairs(PerkConfig) do
+		table.insert(perkIds, id)
+	end
+	table.sort(perkIds)
 
 	local function toggleTool(tool)
 		local character = player.Character
@@ -480,6 +548,22 @@ function InventoryUI.Start()
 		end
 	end
 
+	-- Same destroy-and-rebuild-in-one-shot approach as setSlotTool -- see that function's own
+	-- comment (building a bare card first and adding content after it's already been through a
+	-- layout pass silently failed to render).
+	local function setSlotPerk(slot, perkId)
+		if slot.perkId == perkId then
+			return
+		end
+		slot.card:Destroy()
+
+		local perk = perkId and PerkConfig[perkId]
+		local card, stroke = buildPerkSlotCard(slot.parent, slot.layoutOrder, PERK_SLOT_SIZE, perk)
+		slot.card = card
+		slot.stroke = stroke
+		slot.perkId = perkId
+	end
+
 	local function refresh()
 		local tools = currentTools(player)
 		local character = player.Character
@@ -493,6 +577,18 @@ function InventoryUI.Start()
 				slot.stroke.Thickness = equipped and 2.5 or 1.5
 				slot.stroke.Transparency = equipped and 0.1 or 0.4
 			end
+		end
+
+		-- Only the owned ones, in the same stable sorted order every time -- extra owned perks past
+		-- PERK_SLOT_COUNT simply don't show, same soft-cap reasoning as the item grid's TOTAL_SLOTS.
+		local ownedPerkIds = {}
+		for _, id in ipairs(perkIds) do
+			if player:GetAttribute("Perk_" .. id) == true then
+				table.insert(ownedPerkIds, id)
+			end
+		end
+		for i, slot in ipairs(perkSlots) do
+			setSlotPerk(slot, ownedPerkIds[i])
 		end
 
 		coinsLabel.Text = formatAmount(coins.Value)

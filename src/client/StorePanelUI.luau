@@ -1,19 +1,35 @@
+local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
+local BlowerConfig = require(ReplicatedStorage.Shared.BlowerConfig)
+local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
+local ItemPreviewUI = require(script.Parent.ItemPreviewUI)
 local NPCDialogueUI = require(script.Parent.NPCDialogueUI)
 local PanelMotion = require(script.Parent.PanelMotion)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
+local RakeConfig = require(ReplicatedStorage.Shared.RakeConfig)
+local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
 local UpgradeConfig = require(ReplicatedStorage.Shared.UpgradeConfig)
 
--- The actual shop window Ruisu's "Yes" opens (see StoreDialogueUI.luau). Shows every upgrade/perk
--- from the real catalogs (UpgradeConfig.luau/PerkConfig.luau -- the same tables PlayerUpgrades.luau
--- already reads server-side, so there's nothing to keep in sync by hand) with its price and
--- whether the player currently owns it, plus a placeholder Cosmetics section. Unowned rows are
--- clickable: buying hands off to Ruisu's own dialogue box (NPCDialogueUI) for a "Buy X for Y
--- Coins?" confirm, invokes the server-authoritative PurchaseSystem, then Ruisu thanks you (or says
--- why it failed) and the shop reopens with the row updated.
+local TOOL_CONFIGS = { LeafBlower = BlowerConfig, LeafRake = RakeConfig, LeafSack = SackConfig }
+
+-- The actual shop window Ruisu's "Yes" opens (see StoreDialogueUI.luau). Shows every upgrade/perk/
+-- cosmetic from the real catalogs (UpgradeConfig.luau/PerkConfig.luau/CosmeticConfig.luau -- the
+-- same tables PlayerUpgrades.luau already reads server-side, so there's nothing to keep in sync by
+-- hand) with its price and whether the player currently owns it. Unowned rows are clickable: buying
+-- hands off to Ruisu's own dialogue box (NPCDialogueUI) for a "Buy X for Y Coins?" confirm, invokes
+-- the server-authoritative PurchaseSystem, then Ruisu thanks you (or says why it failed) and the
+-- shop reopens with the row updated. Cosmetics are tri-state instead of just owned/unowned -- owned-
+-- but-not-worn rows offer an instant "Equip" (no confirm dialogue needed, nothing is spent) rather
+-- than reusing the buy-confirm flow, since equipping something you already paid for isn't a purchase.
+-- Unowned cosmetics skip the text-only buy confirm entirely -- clicking one opens ItemPreviewUI (a
+-- rotating 3D ViewportFrame model of the actual item, built by the shared ItemPreviewBuilder) with
+-- Buy/Cancel; Buy performs the purchase and Ruisu still delivers the thank-you/failure message
+-- afterward, same as Upgrades/Perks. A perk can also be Currency = "Robux" (see PerkConfig.luau) --
+-- those skip PurchaseSystem/Coins entirely and go straight to Roblox's own native Game Pass
+-- purchase prompt instead, granted server-side by GamePassPerks.luau once Roblox confirms it.
 --
 -- Same autumn-toned modal look as Settings/Inventory (dark brown, tan stroke, FredokaOne), same
 -- PanelMotion open/close + button-press animations as everything else.
@@ -29,6 +45,7 @@ local ROW_STROKE = Color3.fromRGB(210, 150, 80)
 local OWNED_COLOR = Color3.fromRGB(120, 200, 130)
 local DESCRIPTION_COLOR = Color3.fromRGB(225, 205, 180)
 local BADGE_OUTLINE = Color3.fromRGB(255, 238, 210)
+local ROBUX_COLOR = Color3.fromRGB(90, 200, 110)
 
 -- A big chunk of the screen on desktop (clamped at PANEL_MAX_SIZE so it doesn't get silly on a
 -- huge monitor), shrinking proportionally on smaller windows/mobile down to PANEL_MIN_SIZE. The
@@ -69,6 +86,48 @@ local function buildCoinIcon(parent, size)
 	return icon
 end
 
+-- Roblox's own Robux/currency glyph isn't something this project builds from plain Frames the way
+-- everything else is (it's a specific official symbol, not a simple shape) -- a green "R$" badge
+-- reads as "this costs real money" at a glance without needing an image asset, same spirit as every
+-- other icon in this game.
+local function buildRobuxBadge(parent, size)
+	local badge = Instance.new("Frame")
+	badge.Name = "RobuxBadge"
+	badge.Size = UDim2.new(0, size, 0, size)
+	badge.BackgroundColor3 = ROBUX_COLOR
+	badge.BorderSizePixel = 0
+	badge.ZIndex = 13
+	badge.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = badge
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = BADGE_OUTLINE
+	stroke.Transparency = 0.15
+	stroke.Thickness = 2
+	stroke.Parent = badge
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.Text = "R$"
+	label.TextScaled = true
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.ZIndex = 14
+	label.Parent = badge
+
+	local labelPadding = Instance.new("UIPadding")
+	labelPadding.PaddingTop = UDim.new(0, 3)
+	labelPadding.PaddingBottom = UDim.new(0, 3)
+	labelPadding.Parent = label
+
+	return badge
+end
+
 local function buildSectionLabel(parent, layoutOrder, text)
 	local label = Instance.new("TextLabel")
 	label.Name = "SectionLabel"
@@ -88,8 +147,10 @@ end
 -- right. `isOwned` is read fresh each call from the real PlayerUpgrades attribute, so this always
 -- reflects the truth. Unowned rows are a real TextButton (the whole row is the click target, not
 -- just the price -- bigger, more forgiving, especially on mobile) wired to `onBuy`; owned rows are
--- a plain Frame, nothing to click.
-local function buildItemRow(parent, layoutOrder, name, description, price, isOwned, onBuy)
+-- a plain Frame, nothing to click. `currency` defaults to "Coins" (numeric price + coin icon);
+-- "Robux" shows a green R$ badge instead -- `price` is ignored in that case, since a Game Pass's
+-- real price lives entirely on Roblox's website, not in this game's own data (see PerkConfig.luau).
+local function buildItemRow(parent, layoutOrder, name, description, price, isOwned, onBuy, currency)
 	local row = Instance.new(isOwned and "Frame" or "TextButton")
 	row.Name = "Row" .. layoutOrder
 	row.LayoutOrder = layoutOrder
@@ -167,6 +228,165 @@ local function buildItemRow(parent, layoutOrder, name, description, price, isOwn
 		ownedLabel.TextColor3 = OWNED_COLOR
 		ownedLabel.ZIndex = 13
 		ownedLabel.Parent = row
+	else
+		local priceHolder = Instance.new("Frame")
+		priceHolder.Name = "Price"
+		priceHolder.AnchorPoint = Vector2.new(1, 0.5)
+		priceHolder.Position = UDim2.new(1, -14, 0.5, 0)
+		priceHolder.Size = UDim2.new(0, rightWidth, 0, 24)
+		priceHolder.BackgroundTransparency = 1
+		priceHolder.ZIndex = 13
+		priceHolder.Parent = row
+
+		local priceLayout = Instance.new("UIListLayout")
+		priceLayout.FillDirection = Enum.FillDirection.Horizontal
+		priceLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+		priceLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		priceLayout.Padding = UDim.new(0, 6)
+		priceLayout.Parent = priceHolder
+
+		if currency == "Robux" then
+			local robuxHolder = Instance.new("Frame")
+			robuxHolder.Name = "RobuxIconHolder"
+			robuxHolder.LayoutOrder = 1
+			robuxHolder.Size = UDim2.new(0, 20, 0, 20)
+			robuxHolder.BackgroundTransparency = 1
+			robuxHolder.ZIndex = 13
+			robuxHolder.Parent = priceHolder
+			buildRobuxBadge(robuxHolder, 20)
+
+			local buyLabel = Instance.new("TextLabel")
+			buyLabel.Name = "Amount"
+			buyLabel.LayoutOrder = 2
+			buyLabel.Size = UDim2.new(0, 0, 1, 0)
+			buyLabel.AutomaticSize = Enum.AutomaticSize.X
+			buyLabel.BackgroundTransparency = 1
+			buyLabel.Font = Enum.Font.FredokaOne
+			buyLabel.Text = "Buy"
+			buyLabel.TextSize = 16
+			buyLabel.TextColor3 = Color3.new(1, 1, 1)
+			buyLabel.ZIndex = 13
+			buyLabel.Parent = priceHolder
+		else
+			local coinHolder = Instance.new("Frame")
+			coinHolder.Name = "CoinIconHolder"
+			coinHolder.LayoutOrder = 1
+			coinHolder.Size = UDim2.new(0, 20, 0, 20)
+			coinHolder.BackgroundTransparency = 1
+			coinHolder.ZIndex = 13
+			coinHolder.Parent = priceHolder
+			buildCoinIcon(coinHolder, 20)
+
+			local priceLabel = Instance.new("TextLabel")
+			priceLabel.Name = "Amount"
+			priceLabel.LayoutOrder = 2
+			priceLabel.Size = UDim2.new(0, 0, 1, 0)
+			priceLabel.AutomaticSize = Enum.AutomaticSize.X
+			priceLabel.BackgroundTransparency = 1
+			priceLabel.Font = Enum.Font.FredokaOne
+			priceLabel.Text = formatAmount(price)
+			priceLabel.TextSize = 16
+			priceLabel.TextColor3 = Color3.new(1, 1, 1)
+			priceLabel.ZIndex = 13
+			priceLabel.Parent = priceHolder
+		end
+	end
+
+	return row
+end
+
+-- Same visual shape as buildItemRow, but tri-state instead of owned/unowned: "unowned" shows a
+-- price (clicking buys it), "owned" shows an "Equip" prompt (clicking equips it, no confirm/spend
+-- involved), "equipped" shows a non-clickable "Equipped" badge -- the one state that's currently
+-- active for that tool can't itself be clicked away, only replaced by picking a different row.
+local function buildCosmeticRow(parent, layoutOrder, name, description, price, state, onClick)
+	local clickable = state ~= "equipped"
+	local row = Instance.new(clickable and "TextButton" or "Frame")
+	row.Name = "Row" .. layoutOrder
+	row.LayoutOrder = layoutOrder
+	row.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
+	row.BackgroundColor3 = ROW_COLOR
+	row.BorderSizePixel = 0
+	row.ZIndex = 12
+	if clickable then
+		row.AutoButtonColor = false
+		row.Text = ""
+	end
+	row.Parent = parent
+
+	if clickable and onClick then
+		row.MouseButton1Click:Connect(onClick)
+		PanelMotion.AnimateButton(row)
+	end
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 18)
+	corner.Parent = row
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = ROW_STROKE
+	stroke.Transparency = state == "equipped" and 0.1 or 0.45
+	stroke.Thickness = state == "equipped" and 2 or 1.5
+	stroke.Parent = row
+
+	local rightWidth = 88
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "Name"
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Position = UDim2.new(0, 14, 0, 8)
+	nameLabel.Size = UDim2.new(1, -14 - rightWidth - 10, 0, 20)
+	nameLabel.Font = Enum.Font.FredokaOne
+	nameLabel.Text = name
+	nameLabel.TextSize = 17
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	nameLabel.ZIndex = 13
+	nameLabel.Parent = row
+
+	local descriptionLabel = Instance.new("TextLabel")
+	descriptionLabel.Name = "Description"
+	descriptionLabel.BackgroundTransparency = 1
+	descriptionLabel.Position = UDim2.new(0, 14, 0, 30)
+	descriptionLabel.Size = UDim2.new(1, -14 - rightWidth - 10, 0, 26)
+	descriptionLabel.Font = Enum.Font.FredokaOne
+	descriptionLabel.Text = description
+	descriptionLabel.TextSize = 13
+	descriptionLabel.TextWrapped = true
+	descriptionLabel.TextXAlignment = Enum.TextXAlignment.Left
+	descriptionLabel.TextYAlignment = Enum.TextYAlignment.Top
+	descriptionLabel.TextColor3 = DESCRIPTION_COLOR
+	descriptionLabel.ZIndex = 13
+	descriptionLabel.Parent = row
+
+	if state == "equipped" then
+		local equippedLabel = Instance.new("TextLabel")
+		equippedLabel.Name = "Equipped"
+		equippedLabel.AnchorPoint = Vector2.new(1, 0.5)
+		equippedLabel.Position = UDim2.new(1, -14, 0.5, 0)
+		equippedLabel.Size = UDim2.new(0, rightWidth, 0, 24)
+		equippedLabel.BackgroundTransparency = 1
+		equippedLabel.Font = Enum.Font.FredokaOne
+		equippedLabel.Text = "Equipped"
+		equippedLabel.TextSize = 14
+		equippedLabel.TextXAlignment = Enum.TextXAlignment.Right
+		equippedLabel.TextColor3 = OWNED_COLOR
+		equippedLabel.ZIndex = 13
+		equippedLabel.Parent = row
+	elseif state == "owned" then
+		local equipLabel = Instance.new("TextLabel")
+		equipLabel.Name = "EquipPrompt"
+		equipLabel.AnchorPoint = Vector2.new(1, 0.5)
+		equipLabel.Position = UDim2.new(1, -14, 0.5, 0)
+		equipLabel.Size = UDim2.new(0, rightWidth, 0, 24)
+		equipLabel.BackgroundTransparency = 1
+		equipLabel.Font = Enum.Font.FredokaOne
+		equipLabel.Text = "Equip"
+		equipLabel.TextSize = 15
+		equipLabel.TextXAlignment = Enum.TextXAlignment.Right
+		equipLabel.TextColor3 = ACCENT_COLOR
+		equipLabel.ZIndex = 13
+		equipLabel.Parent = row
 	else
 		local priceHolder = Instance.new("Frame")
 		priceHolder.Name = "Price"
@@ -372,6 +592,11 @@ local function buildUI()
 	scroll.BorderSizePixel = 0
 	scroll.ScrollBarThickness = 6
 	scroll.ScrollBarImageColor3 = STROKE_COLOR
+	-- Roblox's scrollbar overlays the last few pixels of content by default -- with the Cosmetics
+	-- sections added, this panel now scrolls far enough that the scrollbar sits directly on top of
+	-- (and visually clips) the rightmost rows' UIStroke outline. Reserving real layout space for it
+	-- instead of overlaying keeps every row's outline fully visible regardless of scroll position.
+	scroll.VerticalScrollBarInset = Enum.ScrollBarInset.Always
 	scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	scroll.ZIndex = 12
@@ -397,38 +622,34 @@ local function buildUI()
 
 	local upgradesRows = buildSection(scroll, 1, "Upgrades")
 	local perksRows = buildSection(scroll, 2, "Perks")
-	local cosmeticsRows = buildSection(scroll, 3, "Cosmetics")
-
-	local cosmeticsPlaceholder = Instance.new("TextLabel")
-	cosmeticsPlaceholder.Name = "Placeholder"
-	cosmeticsPlaceholder.BackgroundTransparency = 1
-	cosmeticsPlaceholder.Size = UDim2.new(1, 0, 0, 30)
-	cosmeticsPlaceholder.Font = Enum.Font.FredokaOne
-	cosmeticsPlaceholder.Text = "No skins for sale yet -- check back soon!"
-	cosmeticsPlaceholder.TextSize = 14
-	cosmeticsPlaceholder.TextXAlignment = Enum.TextXAlignment.Left
-	cosmeticsPlaceholder.TextColor3 = DESCRIPTION_COLOR
-	cosmeticsPlaceholder.ZIndex = 12
-	cosmeticsPlaceholder.Parent = cosmeticsRows
+	local blowerSkinRows = buildSection(scroll, 3, "Blower Skins")
+	local rakeSkinRows = buildSection(scroll, 4, "Rake Skins")
+	local sackSkinRows = buildSection(scroll, 5, "Sack Skins")
 
 	screenGui.Parent = playerGui
-	return backdrop, panel, closeButton, coinsLabel, upgradesRows, perksRows
+	return backdrop, panel, closeButton, coinsLabel, upgradesRows, perksRows,
+		blowerSkinRows, rakeSkinRows, sackSkinRows
 end
 
 function StorePanelUI.Start()
 	local player = Players.LocalPlayer
-	local backdrop, panel, closeButton, coinsLabel, upgradesRows, perksRows = buildUI()
+	local backdrop, panel, closeButton, coinsLabel, upgradesRows, perksRows,
+		blowerSkinRows, rakeSkinRows, sackSkinRows = buildUI()
 	local motion = PanelMotion.new(panel, backdrop)
 
 	local remotes = ReplicatedStorage.Shared:WaitForChild("Remotes")
 	local purchaseItemFunction = remotes:WaitForChild("PurchaseItem")
+	local equipCosmeticFunction = remotes:WaitForChild("EquipCosmetic")
 
 	local leaderstats = player:WaitForChild("leaderstats")
 	local coins = leaderstats:WaitForChild("Coins")
 
-	-- Forward-declared: refresh()'s row callbacks close over this before it's actually assigned
-	-- below, but refresh() itself is never CALLED until well after that assignment happens.
+	-- Forward-declared: refresh()'s row callbacks close over these before they're actually assigned
+	-- below, but refresh() itself is never CALLED until well after those assignments happen.
 	local attemptPurchase
+	local attemptEquip
+	local previewCosmetic
+	local promptRobuxPurchase
 
 	-- Sorted once at Start() (catalogs don't change at runtime) so row order stays stable across
 	-- refreshes instead of shuffling with Lua's unspecified pairs() order.
@@ -443,6 +664,47 @@ function StorePanelUI.Start()
 		table.insert(perkIds, id)
 	end
 	table.sort(perkIds)
+
+	local cosmeticIdsByTool = { LeafBlower = {}, LeafRake = {}, LeafSack = {} }
+	for id, cosmetic in pairs(CosmeticConfig) do
+		table.insert(cosmeticIdsByTool[cosmetic.Tool], id)
+	end
+	for _, ids in pairs(cosmeticIdsByTool) do
+		table.sort(ids)
+	end
+
+	-- Rebuilds one tool's skin section: a "Default" row (always available, free) followed by every
+	-- purchasable skin for that tool -- exactly one row ends up "equipped" at a time, matching
+	-- whichever cosmetic id PlayerUpgrades currently has set for this tool (read directly off the
+	-- Player's own replicated Attributes, same as Upgrade_*/Perk_* above -- no server module needed
+	-- client-side for this).
+	local function refreshCosmeticSection(rows, toolName)
+		for _, child in ipairs(rows:GetChildren()) do
+			if child:IsA("GuiObject") then
+				child:Destroy()
+			end
+		end
+
+		local equippedId = player:GetAttribute("Cosmetic_" .. toolName) or "Default"
+
+		buildCosmeticRow(rows, 1, "Default", "The original look.", 0,
+			equippedId == "Default" and "equipped" or "owned", function()
+				attemptEquip(toolName, "Default")
+			end)
+
+		for i, id in ipairs(cosmeticIdsByTool[toolName]) do
+			local cosmetic = CosmeticConfig[id]
+			local owned = player:GetAttribute("CosmeticOwned_" .. id) == true
+			local state = equippedId == id and "equipped" or (owned and "owned" or "unowned")
+			buildCosmeticRow(rows, i + 1, cosmetic.Name, cosmetic.Description, cosmetic.Price, state, function()
+				if state == "unowned" then
+					previewCosmetic(toolName, id, cosmetic)
+				else
+					attemptEquip(toolName, id)
+				end
+			end)
+		end
+	end
 
 	local function refresh()
 		coinsLabel.Text = formatAmount(coins.Value)
@@ -471,10 +733,22 @@ function StorePanelUI.Start()
 		for i, id in ipairs(perkIds) do
 			local perk = PerkConfig[id]
 			local isOwned = player:GetAttribute("Perk_" .. id) == true
-			buildItemRow(perksRows, i, perk.Name, perk.Description, perk.Price, isOwned, function()
-				attemptPurchase("Perk", id, perk)
-			end)
+			local onBuy
+			if perk.Currency == "Robux" then
+				onBuy = function()
+					promptRobuxPurchase(perk)
+				end
+			else
+				onBuy = function()
+					attemptPurchase("Perk", id, perk)
+				end
+			end
+			buildItemRow(perksRows, i, perk.Name, perk.Description, perk.Price, isOwned, onBuy, perk.Currency)
 		end
+
+		refreshCosmeticSection(blowerSkinRows, "LeafBlower")
+		refreshCosmeticSection(rakeSkinRows, "LeafRake")
+		refreshCosmeticSection(sackSkinRows, "LeafSack")
 	end
 
 	-- Kept live even while closed (cheap, a single Changed connection) so the balance is never
@@ -537,6 +811,111 @@ function StorePanelUI.Start()
 			},
 		})
 	end
+
+	-- Shows a single Ruisu line with no choices, auto-closing after `duration` -- same shape as
+	-- NPCDialogueUI.SayAndClose, but usable when the dialogue box isn't already open (unlike
+	-- SayAndClose, which only changes the text/closes a box some earlier Show already opened).
+	local function showRuisuMessage(text, duration)
+		NPCDialogueUI.Show({
+			rigName = "Ruisu",
+			displayName = "Ruisu",
+			question = text,
+			choices = {},
+		})
+		task.delay(duration, function()
+			NPCDialogueUI.Close()
+			StorePanelUI.Open()
+		end)
+	end
+
+	-- Unowned cosmetics open a 3D preview instead of a text-only buy confirm -- Buy performs the
+	-- purchase directly (no separate "Buy X for Y Coins?" step, the preview panel's price/Buy/Cancel
+	-- already covers that) and Ruisu still delivers the thank-you/failure message afterward, same as
+	-- Upgrades/Perks.
+	previewCosmetic = function(toolName, id, cosmetic)
+		closePanel()
+		local toolConfig = TOOL_CONFIGS[toolName]
+		local colors = toolConfig and toolConfig.Cosmetics[id]
+		ItemPreviewUI.Show({
+			toolName = toolName,
+			colors = colors,
+			name = cosmetic.Name,
+			description = cosmetic.Description,
+			price = cosmetic.Price,
+			onCancel = function()
+				StorePanelUI.Open()
+			end,
+			onBuy = function()
+				local result = purchaseItemFunction:InvokeServer("Cosmetic", id)
+				if result and result.success then
+					showRuisuMessage("Thank you for your purchase!", 1.5)
+				else
+					showRuisuMessage((result and result.reason) or "Something went wrong -- try again.", 1.5)
+				end
+			end,
+		})
+	end
+
+	-- Equipping isn't a purchase -- nothing's spent, no confirm dialogue needed -- just an instant
+	-- server-validated swap (see PurchaseSystem.EquipCosmetic) followed by re-rendering the row
+	-- states in place so the new "Equipped" badge shows up immediately.
+	attemptEquip = function(toolName, cosmeticId)
+		local result = equipCosmeticFunction:InvokeServer(toolName, cosmeticId)
+		if not (result and result.success) then
+			warn(string.format(
+				"[StorePanelUI] couldn't equip %s: %s",
+				cosmeticId, (result and result.reason) or "unknown error"
+			))
+		end
+		refresh()
+	end
+
+	-- Robux-currency perks skip PurchaseSystem entirely -- straight to Roblox's own native purchase
+	-- prompt, which IS the confirm dialogue (it shows the real price and its own Buy/Cancel; nothing
+	-- in this game controls or even knows that price -- see PerkConfig.luau). The actual grant
+	-- happens server-side (GamePassPerks.luau) once Roblox confirms the purchase; the
+	-- PromptGamePassPurchaseFinished listener below just reacts to it for the UI's sake.
+	promptRobuxPurchase = function(perk)
+		closePanel()
+		if not perk.GamePassId or perk.GamePassId == 0 then
+			showRuisuMessage("This one isn't set up yet -- check back soon!", 1.5)
+			return
+		end
+		local ok = pcall(function()
+			MarketplaceService:PromptGamePassPurchase(player, perk.GamePassId)
+		end)
+		if not ok then
+			showRuisuMessage("Something went wrong -- try again.", 1.5)
+		end
+	end
+
+	-- Fires (client-side) whenever ANY Game Pass purchase prompt this player saw finishes, not just
+	-- ones opened from this store -- filtered down to Robux perks this catalog actually knows about.
+	-- A successful purchase already replicated the granted Perk_<id> Attribute by the time this
+	-- fires (GamePassPerks.luau grants it server-side the moment Roblox confirms it), so reopening/
+	-- refreshing here just makes the row's new "Owned" state visible without needing to reopen the
+	-- panel by hand.
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(finishedPlayer, gamePassId, wasPurchased)
+		if finishedPlayer ~= player then
+			return
+		end
+		local matchedPerk
+		for _, id in ipairs(perkIds) do
+			local perk = PerkConfig[id]
+			if perk.GamePassId == gamePassId then
+				matchedPerk = perk
+				break
+			end
+		end
+		if not matchedPerk then
+			return
+		end
+		if wasPurchased then
+			showRuisuMessage("Thank you for your purchase!", 1.5)
+		else
+			StorePanelUI.Open()
+		end
+	end)
 
 	function StorePanelUI.Open()
 		refresh()

@@ -195,6 +195,35 @@ local function attachBackpack(character, player)
 	weldTo(torso, rightStrap)
 end
 
+-- Recolors the always-worn backpack prop (built once in attachBackpack, which colors it inline at
+-- creation time) to match whatever cosmetic the player currently has equipped -- used by
+-- RefreshCosmetic below so switching skins in the store repaints a backpack that's already on the
+-- player's back, instead of only taking effect the next time they respawn/re-equip.
+local function applyBackpackCosmetic(character, colors)
+	local pack = character:FindFirstChild(BACKPACK_NAME)
+	if not pack then
+		return
+	end
+	pack.Color = colors.BodyColor
+
+	local partColors = {
+		BackpackTrim = colors.GripColor,
+		BackpackMotor = colors.GripColor,
+		BackpackVentLeft = colors.GripColor,
+		BackpackVentRight = colors.GripColor,
+		BackpackStrapLeft = colors.GripColor,
+		BackpackStrapRight = colors.GripColor,
+		BackpackPullHandle = colors.NozzleColor,
+		BackpackExhaust = colors.NozzleColor,
+	}
+	for partName, color in pairs(partColors) do
+		local part = character:FindFirstChild(partName)
+		if part then
+			part.Color = color
+		end
+	end
+end
+
 local function isEquippedByPlayer(tool)
 	local character = tool.Parent
 	return character ~= nil and character:FindFirstChildOfClass("Humanoid") ~= nil
@@ -451,6 +480,29 @@ local function onPlayerAdded(player)
 	player.CharacterAdded:Connect(onCharacterAdded)
 	if player.Character then
 		onCharacterAdded(player.Character)
+	end
+end
+
+-- Called by PurchaseSystem's EquipCosmetic handler right after a skin change is validated -- repaints
+-- whatever's already in the world for this player (the worn backpack, plus the tool itself whether
+-- it's currently equipped or just sitting in the Backpack) so a skin swap is visible immediately
+-- instead of only on the next equip/respawn.
+function BlowerTool.RefreshCosmetic(player)
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local colors = BlowerConfig.Cosmetics[PlayerUpgrades.GetCosmetic(player, TOOL_NAME)] or BlowerConfig.Cosmetics.Default
+	applyBackpackCosmetic(character, colors)
+
+	local tool = character:FindFirstChild(TOOL_NAME)
+	if not tool then
+		local backpack = player:FindFirstChild("Backpack")
+		tool = backpack and backpack:FindFirstChild(TOOL_NAME)
+	end
+	if tool then
+		applyCosmetic(tool, player)
 	end
 end
 

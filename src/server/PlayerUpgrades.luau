@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BlowerConfig = require(ReplicatedStorage.Shared.BlowerConfig)
+local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
 local RakeConfig = require(ReplicatedStorage.Shared.RakeConfig)
 local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
@@ -34,6 +35,10 @@ end
 
 local function cosmeticAttribute(toolName)
 	return "Cosmetic_" .. toolName
+end
+
+local function cosmeticOwnedAttribute(id)
+	return "CosmeticOwned_" .. id
 end
 
 function PlayerUpgrades.HasUpgrade(player, id)
@@ -91,6 +96,29 @@ end
 
 function PlayerUpgrades.SetCosmetic(player, toolName, cosmeticId)
 	player:SetAttribute(cosmeticAttribute(toolName), cosmeticId)
+end
+
+-- "Default" is free and every player already has it -- it's deliberately not a CosmeticConfig
+-- entry (see that file), so it's special-cased here rather than needing a zero-price catalog row.
+function PlayerUpgrades.HasCosmetic(player, id)
+	if id == DEFAULT_COSMETIC then
+		return true
+	end
+	return player:GetAttribute(cosmeticOwnedAttribute(id)) == true
+end
+
+function PlayerUpgrades.GrantCosmetic(player, id)
+	if id == DEFAULT_COSMETIC or not CosmeticConfig[id] then
+		return
+	end
+	player:SetAttribute(cosmeticOwnedAttribute(id), true)
+end
+
+function PlayerUpgrades.RemoveCosmetic(player, id)
+	if id == DEFAULT_COSMETIC then
+		return
+	end
+	player:SetAttribute(cosmeticOwnedAttribute(id), nil)
 end
 
 -- Returns the tool's base config (BlowerConfig/RakeConfig/SackConfig) with any owned upgrade's
@@ -152,6 +180,16 @@ function PlayerUpgrades.GetOwnedPerkIds(player)
 	local ids = {}
 	for id in pairs(PerkConfig) do
 		if PlayerUpgrades.HasPerk(player, id) then
+			table.insert(ids, id)
+		end
+	end
+	return ids
+end
+
+function PlayerUpgrades.GetOwnedCosmeticIds(player)
+	local ids = {}
+	for id in pairs(CosmeticConfig) do
+		if PlayerUpgrades.HasCosmetic(player, id) then
 			table.insert(ids, id)
 		end
 	end
