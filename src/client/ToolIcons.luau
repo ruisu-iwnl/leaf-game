@@ -1,6 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BlowerConfig = require(ReplicatedStorage.Shared.BlowerConfig)
+local RakeConfig = require(ReplicatedStorage.Shared.RakeConfig)
 local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
 
 -- Shared flat-icon builders for each tool, reused by both HotbarUI and InventoryUI so they stay
@@ -76,9 +77,54 @@ function ToolIcons.BuildSackIcon(parent)
 	tieCorner.Parent = tie
 end
 
+-- A vertical handle with a horizontal head bar and a row of short tines -- reads as a rake at a
+-- glance, same "plain Frames, no rotation, no glyphs" approach as the other icons.
+function ToolIcons.BuildRakeIcon(parent)
+	local handle = Instance.new("Frame")
+	handle.Name = "Icon"
+	handle.AnchorPoint = Vector2.new(0.5, 0.5)
+	handle.Position = UDim2.new(0.5, 0, 0.5, 3)
+	handle.Size = UDim2.new(0, 5, 0, 24)
+	handle.BackgroundColor3 = RakeConfig.HandleColor
+	handle.BorderSizePixel = 0
+	handle.ZIndex = ICON_ZINDEX
+	handle.Parent = parent
+
+	local handleCorner = Instance.new("UICorner")
+	handleCorner.CornerRadius = UDim.new(1, 0)
+	handleCorner.Parent = handle
+
+	local head = Instance.new("Frame")
+	head.Name = "Head"
+	head.AnchorPoint = Vector2.new(0.5, 1)
+	head.Position = UDim2.new(0.5, 0, 0, 2)
+	head.Size = UDim2.new(0, 26, 0, 6)
+	head.BackgroundColor3 = RakeConfig.HeadColor
+	head.BorderSizePixel = 0
+	head.ZIndex = ICON_ZINDEX + 1
+	head.Parent = handle
+
+	local headCorner = Instance.new("UICorner")
+	headCorner.CornerRadius = UDim.new(0, 2)
+	headCorner.Parent = head
+
+	for i = 1, 4 do
+		local tine = Instance.new("Frame")
+		tine.Name = "Tine" .. i
+		tine.AnchorPoint = Vector2.new(0.5, 0)
+		tine.Position = UDim2.new((i - 1) / 3, 0, 1, 0)
+		tine.Size = UDim2.new(0, 2, 0, 6)
+		tine.BackgroundColor3 = RakeConfig.HeadColor
+		tine.BorderSizePixel = 0
+		tine.ZIndex = ICON_ZINDEX + 1
+		tine.Parent = head
+	end
+end
+
 ToolIcons.Builders = {
 	LeafBlower = ToolIcons.BuildBlowerIcon,
 	LeafSack = ToolIcons.BuildSackIcon,
+	LeafRake = ToolIcons.BuildRakeIcon,
 }
 
 return ToolIcons

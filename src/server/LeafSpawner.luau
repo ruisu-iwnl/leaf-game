@@ -608,6 +608,39 @@ local function blowRestingLeaf(leaf, rest, direction, blowConfig, player)
 	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees, player)
 end
 
+-- The Rake's core move: drags a resting leaf toward `origin` (the player's own position) instead
+-- of away from it, in one big jump -- the whole point is recovering leaves stuck in a map
+-- corner/edge that the Blower can only ever push further away. Clamped so a leaf never gets
+-- pulled all the way onto the player, just close (RakeStopBuffer).
+local function pullRestingLeaf(leaf, rest, origin, rakeConfig, player)
+	local toPlayerX = origin.X - rest.baseX
+	local toPlayerZ = origin.Z - rest.baseZ
+	local distanceToPlayer = math.sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ)
+	if distanceToPlayer <= rakeConfig.RakeStopBuffer then
+		return
+	end
+	local dirX, dirZ = toPlayerX / distanceToPlayer, toPlayerZ / distanceToPlayer
+
+	local jitterRad = math.rad((math.random() - 0.5) * 2 * rakeConfig.RakeDirectionJitterDegrees)
+	local cos, sin = math.cos(jitterRad), math.sin(jitterRad)
+	local jitteredX = dirX * cos - dirZ * sin
+	local jitteredZ = dirX * sin + dirZ * cos
+
+	local desiredPull = rakeConfig.RakePullDistanceMin + math.random() * (rakeConfig.RakePullDistanceMax - rakeConfig.RakePullDistanceMin)
+	local pullDistance = math.min(desiredPull, math.max(distanceToPlayer - rakeConfig.RakeStopBuffer, 0))
+	if pullDistance <= 0.05 then
+		return
+	end
+
+	local targetX = rest.baseX + jitteredX * pullDistance
+	local targetZ = rest.baseZ + jitteredZ * pullDistance
+	local liftHeight = rakeConfig.RakeLiftMin + math.random() * (rakeConfig.RakeLiftMax - rakeConfig.RakeLiftMin)
+	local duration = rakeConfig.RakeDurationMin + math.random() * (rakeConfig.RakeDurationMax - rakeConfig.RakeDurationMin)
+	local spinDegrees = rakeConfig.RakeSpinDegreesMin + math.random() * (rakeConfig.RakeSpinDegreesMax - rakeConfig.RakeSpinDegreesMin)
+
+	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees, player)
+end
+
 -- Hysteresis refill: fills up to FallingTargetCount then pauses, and only starts topping up
 -- again once the total on-map count drops to FallingResumeBelow (via natural despawns, or later,
 -- players clearing leaves at the cleanup zone). Avoids both "stuck at cap forever" and "never stops".
@@ -773,6 +806,58 @@ function LeafSpawner.ApplyBlow(player, origin, direction, blowConfig)
 					-- than caching them at motion start.
 					leaf:SetAttribute("FallTargetX", newX)
 					leaf:SetAttribute("FallTargetZ", newZ)
+				end
+			end
+		end
+	end
+end
+
+-- Called by RakeTool on a timer while a player's rake is equipped: drags every resting leaf within
+-- the cone toward `origin` (the player's own position, not a fixed aim point -- see RakeTool's
+-- getAimOriginDirection) instead of away from it, and nudges the landing target of any still-falling
+-- leaf caught in the cone the same way. Exists specifically to recover leaves stuck in a map
+-- corner/edge, since the Blower can only ever push them further away. `rakeConfig` is RakeConfig
+-- itself, mirroring how ApplyBlow takes blowConfig -- this module stays agnostic to either tool.
+function LeafSpawner.ApplyRake(player, origin, direction, rakeConfig)
+	local cosHalfAngle = math.cos(math.rad(rakeConfig.RakeConeAngleDegrees / 2))
+	local range = rakeConfig.RakeRange
+
+	for leaf, rest in pairs(restingLeaves) do
+		if not rest.disturbing then
+			local toLeafX = rest.baseX - origin.X
+			local toLeafZ = rest.baseZ - origin.Z
+			local distance = math.sqrt(toLeafX * toLeafX + toLeafZ * toLeafZ)
+			if distance > 0.05 and distance <= range then
+				local dot = (toLeafX * direction.X + toLeafZ * direction.Z) / distance
+				if dot >= cosHalfAngle then
+					pullRestingLeaf(leaf, rest, origin, rakeConfig, player)
+				end
+			end
+		end
+	end
+
+	for leaf, state in pairs(fallingLeaves) do
+		local toLeafX = state.baseX - origin.X
+		local toLeafZ = state.baseZ - origin.Z
+		local distance = math.sqrt(toLeafX * toLeafX + toLeafZ * toLeafZ)
+		if distance <= range then
+			local dot = distance > 0.05 and (toLeafX * direction.X + toLeafZ * direction.Z) / distance or 1
+			if dot >= cosHalfAngle then
+				local toPlayerX = origin.X - state.baseX
+				local toPlayerZ = origin.Z - state.baseZ
+				local distanceToPlayer = math.sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ)
+				if distanceToPlayer > rakeConfig.RakeStopBuffer then
+					local pullX, pullZ = toPlayerX / distanceToPlayer, toPlayerZ / distanceToPlayer
+					local step = math.min(rakeConfig.RakeFallingRedirectPerTick, distanceToPlayer - rakeConfig.RakeStopBuffer)
+					local wantedX = state.baseX + pullX * step
+					local wantedZ = state.baseZ + pullZ * step
+					local newX, newZ = clampTargetForObstacles(state.baseX, state.baseZ, state.restY, wantedX, wantedZ)
+					if not isInAvoidRegion(newX, newZ) then
+						state.baseX = newX
+						state.baseZ = newZ
+						leaf:SetAttribute("FallTargetX", newX)
+						leaf:SetAttribute("FallTargetZ", newZ)
+					end
 				end
 			end
 		end

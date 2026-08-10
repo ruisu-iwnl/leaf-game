@@ -33,6 +33,7 @@ local BADGE_OUTLINE = Color3.fromRGB(255, 238, 210)
 local DISPLAY_NAMES = {
 	LeafBlower = "Blower",
 	LeafSack = "Sack",
+	LeafRake = "Rake",
 }
 
 -- Layout
