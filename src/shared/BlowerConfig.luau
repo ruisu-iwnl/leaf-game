@@ -28,6 +28,12 @@ return {
 	-- at the ground in front of the nozzle, not a wide gust, but with real reach and force.
 	BlowConeAngleDegrees = 32,
 	BlowRange = 20,
+	-- A cone is a single point at its own apex -- anything off-axis but very close to the nozzle
+	-- (e.g. leaves sitting right at the player's feet) can fail the angle test even though they're
+	-- well within arm's reach, since the cone hasn't widened out yet at that distance. This radius
+	-- is a small unconditional bubble around the nozzle where leaves are affected regardless of
+	-- angle, layered on top of the angled cone for everything further out.
+	BlowCloseRadius = 4,
 	-- How far below horizontal the cone points, so it aims at the ground instead of dead level.
 	BlowPitchDownDegrees = 9,
 	BlowInterval = 0.12,

@@ -31,14 +31,14 @@ local DESCRIPTION_COLOR = Color3.fromRGB(225, 205, 180)
 local BADGE_OUTLINE = Color3.fromRGB(255, 238, 210)
 
 -- A big chunk of the screen on desktop (clamped at PANEL_MAX_SIZE so it doesn't get silly on a
--- huge monitor), shrinking proportionally on smaller windows/mobile down to PANEL_MIN_SIZE -- below
--- that floor the internal layout (fixed-width title vs. right-anchored Coins/close button) would
--- start overlapping, so this is the narrowest it's designed to go rather than an arbitrary number.
+-- huge monitor), shrinking proportionally on smaller windows/mobile down to PANEL_MIN_SIZE. The
+-- header's fixed-width elements (title/coins/close, below) are sized to still fit side-by-side
+-- without overlapping even at that floor.
 local PANEL_WIDTH_SCALE = 0.6
 local PANEL_HEIGHT_SCALE = 0.82
-local PANEL_MIN_SIZE = Vector2.new(460, 480)
+local PANEL_MIN_SIZE = Vector2.new(300, 380)
 local PANEL_MAX_SIZE = Vector2.new(780, 820)
-local PANEL_PADDING = 18
+local PANEL_PADDING = 14
 local HEADER_HEIGHT = 30
 local ROW_HEIGHT = 64
 
@@ -300,7 +300,7 @@ local function buildUI()
 	title.Name = "Title"
 	title.BackgroundTransparency = 1
 	title.Position = UDim2.new(0, PANEL_PADDING, 0, PANEL_PADDING)
-	title.Size = UDim2.new(0, 200, 0, HEADER_HEIGHT)
+	title.Size = UDim2.new(0, 136, 0, HEADER_HEIGHT)
 	title.Font = Enum.Font.FredokaOne
 	title.Text = "Ruisu's Shop"
 	title.TextSize = 22
@@ -329,8 +329,8 @@ local function buildUI()
 	local coinsHolder = Instance.new("Frame")
 	coinsHolder.Name = "Coins"
 	coinsHolder.AnchorPoint = Vector2.new(1, 0)
-	coinsHolder.Position = UDim2.new(1, -48, 0, PANEL_PADDING)
-	coinsHolder.Size = UDim2.new(0, 130, 0, HEADER_HEIGHT)
+	coinsHolder.Position = UDim2.new(1, -44, 0, PANEL_PADDING)
+	coinsHolder.Size = UDim2.new(0, 100, 0, HEADER_HEIGHT)
 	coinsHolder.BackgroundTransparency = 1
 	coinsHolder.ZIndex = 12
 	coinsHolder.Parent = panel

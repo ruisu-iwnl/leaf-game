@@ -2,6 +2,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
+local UILayout = require(script.Parent.UILayout)
+
 -- Same slide-in/pulse/shake progress-bar system as OverheatUI.luau, reused as-is (see that file's
 -- comments for the reasoning behind each piece), just reading the Rake's flat RakeCooldownFraction/
 -- RakeOnCooldown attributes instead of the Blower's heat buildup -- a straight timer counting down
@@ -32,7 +34,7 @@ local function buildUI()
 	local container = Instance.new("Frame")
 	container.Name = "Container"
 	container.AnchorPoint = Vector2.new(0.5, 1)
-	container.Position = UDim2.new(0.5, 0, 1, -100)
+	container.Position = UDim2.new(0.5, 0, 1, -UILayout.HudBottomMargin)
 	container.Size = UDim2.new(0, 220, 0, 18)
 	container.BackgroundTransparency = 1
 	container.Visible = false

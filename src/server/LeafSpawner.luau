@@ -784,7 +784,7 @@ function LeafSpawner.ApplyBlow(player, origin, direction, blowConfig)
 			local distance = math.sqrt(toLeafX * toLeafX + toLeafZ * toLeafZ)
 			if distance > 0.05 and distance <= range then
 				local dot = (toLeafX * direction.X + toLeafZ * direction.Z) / distance
-				if dot >= cosHalfAngle then
+				if distance <= blowConfig.BlowCloseRadius or dot >= cosHalfAngle then
 					blowRestingLeaf(leaf, rest, direction, blowConfig, player)
 				end
 			end
@@ -797,7 +797,7 @@ function LeafSpawner.ApplyBlow(player, origin, direction, blowConfig)
 		local distance = math.sqrt(toLeafX * toLeafX + toLeafZ * toLeafZ)
 		if distance <= range then
 			local dot = distance > 0.05 and (toLeafX * direction.X + toLeafZ * direction.Z) / distance or 1
-			if dot >= cosHalfAngle then
+			if distance <= blowConfig.BlowCloseRadius or dot >= cosHalfAngle then
 				local wantedX = state.baseX + direction.X * blowConfig.FallingRedirectPerTick
 				local wantedZ = state.baseZ + direction.Z * blowConfig.FallingRedirectPerTick
 				-- Same obstacle clamp as resting leaves -- this path was missing it before, which
@@ -834,7 +834,7 @@ function LeafSpawner.ApplyRake(player, origin, direction, rakeConfig)
 			local distance = math.sqrt(toLeafX * toLeafX + toLeafZ * toLeafZ)
 			if distance > 0.05 and distance <= range then
 				local dot = (toLeafX * direction.X + toLeafZ * direction.Z) / distance
-				if dot >= cosHalfAngle then
+				if distance <= rakeConfig.RakeCloseRadius or dot >= cosHalfAngle then
 					pullRestingLeaf(leaf, rest, origin, rakeConfig, player)
 				end
 			end
@@ -847,7 +847,7 @@ function LeafSpawner.ApplyRake(player, origin, direction, rakeConfig)
 		local distance = math.sqrt(toLeafX * toLeafX + toLeafZ * toLeafZ)
 		if distance <= range then
 			local dot = distance > 0.05 and (toLeafX * direction.X + toLeafZ * direction.Z) / distance or 1
-			if dot >= cosHalfAngle then
+			if distance <= rakeConfig.RakeCloseRadius or dot >= cosHalfAngle then
 				local toPlayerX = origin.X - state.baseX
 				local toPlayerZ = origin.Z - state.baseZ
 				local distanceToPlayer = math.sqrt(toPlayerX * toPlayerX + toPlayerZ * toPlayerZ)

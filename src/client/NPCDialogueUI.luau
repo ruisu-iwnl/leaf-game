@@ -29,6 +29,12 @@ local PORTRAIT_BACKGROUND = Color3.fromRGB(40, 25, 15)
 
 local BOX_WIDTH = 640
 local BOX_HEIGHT = 170
+-- Width scales with the screen (clamped below) so this shrinks to fit smaller/mobile screens
+-- instead of overflowing off the sides; height stays fixed since the content inside doesn't need
+-- to grow, it just wraps narrower.
+local BOX_WIDTH_SCALE = 0.85
+local BOX_MIN_SIZE = Vector2.new(320, BOX_HEIGHT)
+local BOX_MAX_SIZE = Vector2.new(BOX_WIDTH, BOX_HEIGHT)
 local BOX_BOTTOM_MARGIN = 130 -- clears the bottom-right hotbar comfortably regardless of screen width
 local PADDING = 20
 local PORTRAIT_SIZE = 130
@@ -179,12 +185,17 @@ local function buildUI()
 	box.Active = true
 	box.AnchorPoint = Vector2.new(0.5, 1)
 	box.Position = UDim2.new(0.5, 0, 1, -BOX_BOTTOM_MARGIN)
-	box.Size = UDim2.new(0, BOX_WIDTH, 0, BOX_HEIGHT)
+	box.Size = UDim2.new(BOX_WIDTH_SCALE, 0, 0, BOX_HEIGHT)
 	box.BackgroundColor3 = PANEL_COLOR
 	box.BackgroundTransparency = PANEL_TRANSPARENCY
 	box.BorderSizePixel = 0
 	box.ZIndex = 11
 	box.Parent = backdrop
+
+	local boxSizeConstraint = Instance.new("UISizeConstraint")
+	boxSizeConstraint.MinSize = BOX_MIN_SIZE
+	boxSizeConstraint.MaxSize = BOX_MAX_SIZE
+	boxSizeConstraint.Parent = box
 
 	local boxCorner = Instance.new("UICorner")
 	boxCorner.CornerRadius = UDim.new(0, 18)

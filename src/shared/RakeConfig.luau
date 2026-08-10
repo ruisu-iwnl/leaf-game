@@ -36,6 +36,11 @@ return {
 	-- Blower rather than a continuous hold-to-use stream.
 	RakeConeAngleDegrees = 46,
 	RakeRange = 12,
+	-- Same reasoning as BlowerConfig.BlowCloseRadius -- a cone is a single point at its own apex, so
+	-- leaves sitting right next to the player but slightly off-axis can fail the angle test even
+	-- though they're well within reach. This is a small unconditional bubble around the player where
+	-- leaves get pulled regardless of angle, layered on top of the angled cone for everything further out.
+	RakeCloseRadius = 4,
 	RakeCooldownDuration = 2,
 	RakePullDistanceMin = 12,
 	RakePullDistanceMax = 20,

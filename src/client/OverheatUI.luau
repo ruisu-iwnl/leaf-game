@@ -2,6 +2,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
+local UILayout = require(script.Parent.UILayout)
+
 local OverheatUI = {}
 
 local TOOL_NAME = "LeafBlower"
@@ -30,11 +32,12 @@ local function buildUI()
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
 
-	-- Sits above Roblox's default bottom-center hotbar rather than on top of it.
+	-- Bottom-center, just clear of the screen edge -- nothing else lives down here now that
+	-- Roblox's default hotbar is disabled in favor of HotbarUI (bottom-right).
 	local container = Instance.new("Frame")
 	container.Name = "Container"
 	container.AnchorPoint = Vector2.new(0.5, 1)
-	container.Position = UDim2.new(0.5, 0, 1, -100)
+	container.Position = UDim2.new(0.5, 0, 1, -UILayout.HudBottomMargin)
 	container.Size = UDim2.new(0, 220, 0, 18)
 	container.BackgroundTransparency = 1
 	container.Visible = false

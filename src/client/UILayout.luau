@@ -24,4 +24,9 @@ return {
 	-- Bottom-right hotbar, shared with the inventory button that sits just above it.
 	HotbarEdgeMargin = 20,
 	HotbarCardSize = 64,
+
+	-- Bottom-CENTER HUD bars (overheat/rake cooldown). Roblox's own default hotbar used to live here
+	-- (hence a much bigger margin previously), but it's disabled now that HotbarUI replaces it
+	-- bottom-right instead -- just enough gap to clear the screen edge/mobile safe-area.
+	HudBottomMargin = 24,
 }
