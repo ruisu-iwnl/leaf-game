@@ -2,6 +2,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local BadgeSystem = require(script.Parent.BadgeSystem)
 local BlowerTool = require(script.Parent.BlowerTool)
 local LeavesCleanedStat = require(script.Parent.LeavesCleanedStat)
 local MoneySystem = require(script.Parent.MoneySystem)
@@ -113,6 +114,11 @@ local function loadPlayerData(player)
 	-- correctly pick up the now-restored cosmetic on its own once it does.
 	BlowerTool.RefreshCosmetic(player)
 	RakeTool.RefreshCosmetic(player)
+
+	-- Retroactively awards anything this player already qualifies for -- covers both a returning
+	-- player whose save predates a given badge existing, and the ordinary "restored progress already
+	-- clears a threshold" case.
+	BadgeSystem.CheckAll(player)
 end
 
 local function savePlayerData(player)

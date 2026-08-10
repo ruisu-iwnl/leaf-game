@@ -2,6 +2,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local BadgeSystem = require(script.Parent.BadgeSystem)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
 
@@ -34,6 +35,7 @@ local function grantIfOwned(player, gamePassId, perkId)
 	local ok, owns = pcall(MarketplaceService.UserOwnsGamePassAsync, MarketplaceService, player.UserId, gamePassId)
 	if ok and owns then
 		PlayerUpgrades.GrantPerk(player, perkId)
+		BadgeSystem.CheckOwnershipMilestones(player)
 	elseif not ok then
 		warn(string.format("[GamePassPerks] couldn't check %s's ownership of GamePassId %d: %s", player.Name, gamePassId, tostring(owns)))
 	end

@@ -69,9 +69,19 @@ actually wear an owned skin, or call the `EquipCosmetic` remote directly for aut
 
 `Default` is always owned/equippable for every tool and isn't a catalog id -- nothing to add/remove.
 
+## Badges
+
+`:addbadge <player|me> <id>` / `:testbadge <player|me> <id>` -- see `docs/BADGES_SETUP.md` for the
+full list of 10 badges, their criteria, and how to create the real Roblox Badges.
+
+- `:addbadge` awards the REAL badge via BadgeService, bypassing its normal criteria. Permanent --
+  Roblox has no revoke API, so there's no `:removebadge`.
+- `:testbadge` only fires the client-side popup notification, no BadgeService call at all -- safe to
+  run repeatedly to preview the animation, even before the real Badge has been created.
+
 ## Notes
 
 - Ids are matched case-insensitively; an unknown id prints the full list of valid ids for that
   catalog back to Output.
-- Catalogs live in `src/shared/UpgradeConfig.luau`, `PerkConfig.luau`, and `CosmeticConfig.luau` --
-  this table should be kept in sync whenever those change.
+- Catalogs live in `src/shared/UpgradeConfig.luau`, `PerkConfig.luau`, `CosmeticConfig.luau`, and
+  `BadgeConfig.luau` -- this table should be kept in sync whenever those change.

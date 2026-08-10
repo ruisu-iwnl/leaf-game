@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local BadgeSystem = require(script.Parent.BadgeSystem)
 local BlowerTool = require(script.Parent.BlowerTool)
 local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
 local MoneySystem = require(script.Parent.MoneySystem)
@@ -70,6 +71,7 @@ local function purchaseItem(player, itemType, itemId)
 	else
 		PlayerUpgrades.GrantCosmetic(player, itemId)
 	end
+	BadgeSystem.CheckOwnershipMilestones(player)
 
 	return { success = true }
 end

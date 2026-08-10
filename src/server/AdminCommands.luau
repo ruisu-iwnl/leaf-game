@@ -4,6 +4,8 @@ local RunService = game:GetService("RunService")
 local TextChatService = game:GetService("TextChatService")
 
 local AdminConfig = require(ReplicatedStorage.Shared.AdminConfig)
+local BadgeConfig = require(ReplicatedStorage.Shared.BadgeConfig)
+local BadgeSystem = require(script.Parent.BadgeSystem)
 local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
 local MoneySystem = require(script.Parent.MoneySystem)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
@@ -107,6 +109,7 @@ commands.addmoney = function(admin, args)
 		return
 	end
 	MoneySystem.AddCoins(target, amount)
+	BadgeSystem.CheckDeliveryMilestones(target)
 	print(string.format("[Admin] %s gave %d coins to %s", admin.Name, math.floor(amount), target.Name))
 end
 
@@ -170,6 +173,7 @@ commands.addupgrade = function(admin, args)
 		return
 	end
 	PlayerUpgrades.GrantUpgrade(target, id)
+	BadgeSystem.CheckOwnershipMilestones(target)
 	print(string.format("[Admin] %s granted %s the %s upgrade", admin.Name, target.Name, id))
 end
 
@@ -198,6 +202,7 @@ commands.addperk = function(admin, args)
 		return
 	end
 	PlayerUpgrades.GrantPerk(target, id)
+	BadgeSystem.CheckOwnershipMilestones(target)
 	print(string.format("[Admin] %s granted %s the %s perk", admin.Name, target.Name, id))
 end
 
@@ -226,6 +231,7 @@ commands.addcosmetic = function(admin, args)
 		return
 	end
 	PlayerUpgrades.GrantCosmetic(target, id)
+	BadgeSystem.CheckOwnershipMilestones(target)
 	print(string.format("[Admin] %s granted %s the %s cosmetic", admin.Name, target.Name, id))
 end
 
@@ -241,6 +247,42 @@ commands.removecosmetic = function(admin, args)
 	end
 	PlayerUpgrades.RemoveCosmetic(target, id)
 	print(string.format("[Admin] %s removed %s's %s cosmetic", admin.Name, target.Name, id))
+end
+
+-- Awards a real Badge directly, bypassing whatever criteria it normally requires -- still a genuine,
+-- permanent BadgeService award (and still a no-op if BadgeId is the 0 "not set up yet" placeholder,
+-- or if the player already has it). There's deliberately no :removebadge -- Roblox has no API to
+-- revoke a badge once awarded, same limitation as Game Passes (see docs/BADGES_SETUP.md) -- so
+-- there's nothing a command here could actually do.
+commands.addbadge = function(admin, args)
+	local target = resolveTarget(admin, args[1])
+	if not target then
+		return
+	end
+	local id = findCatalogId(BadgeConfig, args[2])
+	if not id then
+		warn(string.format("[Admin] usage: :addbadge <player|me> <id>. Known ids: %s", catalogIdList(BadgeConfig)))
+		return
+	end
+	BadgeSystem.Award(target, id)
+	print(string.format("[Admin] %s awarded %s the %s badge", admin.Name, target.Name, id))
+end
+
+-- Fires just the client-side popup (BadgeNotificationUI.luau) with no BadgeService call at all --
+-- unlike :addbadge, this can be run over and over to preview the notification's look/animation,
+-- regardless of whether the real Badge has been created yet.
+commands.testbadge = function(admin, args)
+	local target = resolveTarget(admin, args[1])
+	if not target then
+		return
+	end
+	local id = findCatalogId(BadgeConfig, args[2])
+	if not id then
+		warn(string.format("[Admin] usage: :testbadge <player|me> <id>. Known ids: %s", catalogIdList(BadgeConfig)))
+		return
+	end
+	BadgeSystem.FireNotification(target, id)
+	print(string.format("[Admin] %s test-fired the %s badge popup for %s", admin.Name, id, target.Name))
 end
 
 -- Shared by both the RemoteEvent path and the (bonus, possibly-inert) chat listeners below.
