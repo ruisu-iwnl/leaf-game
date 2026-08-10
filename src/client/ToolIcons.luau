@@ -8,6 +8,15 @@ local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
 -- visually identical without duplicating the shape code. Built from plain Frames using each
 -- tool's own real colors (BlowerConfig/SackConfig), not text glyphs or images -- keeps them
 -- recognizable and immune to the font-glyph gaps that bit the coin/chevron/gear icons earlier.
+--
+-- Always the Default cosmetic -- a LocalScript can't reach the server-only PlayerUpgrades module
+-- that resolves a player's actual chosen skin, so these match whatever the player is ACTUALLY
+-- holding only as long as every player is still on Default (true until real skins exist to buy).
+-- Once cosmetics ship for real, this'll need the player's choice replicated down as an Attribute.
+local BlowerColors = BlowerConfig.Cosmetics.Default
+local RakeColors = RakeConfig.Cosmetics.Default
+local SackColors = SackConfig.Cosmetics.Default
+
 local ToolIcons = {}
 
 -- Deliberately way higher than any card's own ZIndex (1 unless a caller sets it higher) --
@@ -23,7 +32,7 @@ function ToolIcons.BuildBlowerIcon(parent)
 	-- No Rotation here -- Rotation + UICorner on the same Frame is a known-flaky combination in
 	-- Roblox's UI renderer (this is exactly what made this icon invisible while the un-rotated
 	-- coin icon, right next to it in the same panel, rendered fine).
-	body.BackgroundColor3 = BlowerConfig.BodyColor
+	body.BackgroundColor3 = BlowerColors.BodyColor
 	body.BorderSizePixel = 0
 	body.ZIndex = ICON_ZINDEX
 	body.Parent = parent
@@ -37,7 +46,7 @@ function ToolIcons.BuildBlowerIcon(parent)
 	nozzle.AnchorPoint = Vector2.new(0, 0.5)
 	nozzle.Position = UDim2.new(1, -3, 0.5, 0)
 	nozzle.Size = UDim2.new(0, 11, 0, 11)
-	nozzle.BackgroundColor3 = BlowerConfig.NozzleColor
+	nozzle.BackgroundColor3 = BlowerColors.NozzleColor
 	nozzle.BorderSizePixel = 0
 	nozzle.ZIndex = ICON_ZINDEX + 1
 	nozzle.Parent = body
@@ -53,7 +62,7 @@ function ToolIcons.BuildSackIcon(parent)
 	body.AnchorPoint = Vector2.new(0.5, 0.5)
 	body.Position = UDim2.new(0.5, 0, 0.5, 3)
 	body.Size = UDim2.new(0, 30, 0, 26)
-	body.BackgroundColor3 = SackConfig.SackColor
+	body.BackgroundColor3 = SackColors.SackColor
 	body.BorderSizePixel = 0
 	body.ZIndex = ICON_ZINDEX
 	body.Parent = parent
@@ -67,7 +76,7 @@ function ToolIcons.BuildSackIcon(parent)
 	tie.AnchorPoint = Vector2.new(0.5, 1)
 	tie.Position = UDim2.new(0.5, 0, 0, 3)
 	tie.Size = UDim2.new(0, 14, 0, 8)
-	tie.BackgroundColor3 = SackConfig.SackTieColor
+	tie.BackgroundColor3 = SackColors.SackTieColor
 	tie.BorderSizePixel = 0
 	tie.ZIndex = ICON_ZINDEX + 1
 	tie.Parent = body
@@ -85,7 +94,7 @@ function ToolIcons.BuildRakeIcon(parent)
 	handle.AnchorPoint = Vector2.new(0.5, 0.5)
 	handle.Position = UDim2.new(0.5, 0, 0.5, 3)
 	handle.Size = UDim2.new(0, 5, 0, 24)
-	handle.BackgroundColor3 = RakeConfig.HandleColor
+	handle.BackgroundColor3 = RakeColors.HandleColor
 	handle.BorderSizePixel = 0
 	handle.ZIndex = ICON_ZINDEX
 	handle.Parent = parent
@@ -99,7 +108,7 @@ function ToolIcons.BuildRakeIcon(parent)
 	head.AnchorPoint = Vector2.new(0.5, 1)
 	head.Position = UDim2.new(0.5, 0, 0, 2)
 	head.Size = UDim2.new(0, 26, 0, 6)
-	head.BackgroundColor3 = RakeConfig.HeadColor
+	head.BackgroundColor3 = RakeColors.HeadColor
 	head.BorderSizePixel = 0
 	head.ZIndex = ICON_ZINDEX + 1
 	head.Parent = handle
@@ -114,7 +123,7 @@ function ToolIcons.BuildRakeIcon(parent)
 		tine.AnchorPoint = Vector2.new(0.5, 0)
 		tine.Position = UDim2.new((i - 1) / 3, 0, 1, 0)
 		tine.Size = UDim2.new(0, 2, 0, 6)
-		tine.BackgroundColor3 = RakeConfig.HeadColor
+		tine.BackgroundColor3 = RakeColors.HeadColor
 		tine.BorderSizePixel = 0
 		tine.ZIndex = ICON_ZINDEX + 1
 		tine.Parent = head

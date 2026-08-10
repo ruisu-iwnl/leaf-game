@@ -36,6 +36,29 @@ function MoneySystem.AddCoins(player, amount)
 	end
 end
 
+-- Attempts to deduct `amount` Coins, only if the player can currently afford it -- returns true if
+-- the spend actually happened, false otherwise (can't afford it, or an invalid player/amount). The
+-- one place every purchase in the game should route through (see PurchaseSystem.luau), so nothing
+-- can ever push a balance negative or spend twice off a stale balance check.
+function MoneySystem.SpendCoins(player, amount)
+	if not player or not player.Parent then
+		return false
+	end
+	amount = math.floor(amount)
+	if amount <= 0 then
+		return false
+	end
+
+	local leaderstats = player:FindFirstChild("leaderstats")
+	local coins = leaderstats and leaderstats:FindFirstChild("Coins")
+	if not coins or coins.Value < amount then
+		return false
+	end
+
+	coins.Value -= amount
+	return true
+end
+
 -- Sets Coins to an exact value (clamped to non-negative) rather than adding -- used by admin
 -- commands (e.g. wiping a player's balance for testing), not by normal gameplay rewards.
 function MoneySystem.SetCoins(player, amount)

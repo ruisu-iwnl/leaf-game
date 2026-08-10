@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local PanelMotion = require(script.Parent.PanelMotion)
 local ToolIcons = require(script.Parent.ToolIcons)
 local UILayout = require(script.Parent.UILayout)
 
@@ -229,6 +230,10 @@ local function buildSlotCard(parent, layoutOrder, size, tool)
 		buildEmptySlotIcon(card, size)
 	end
 
+	if tool then
+		PanelMotion.AnimateButton(card)
+	end
+
 	return card, stroke, nameLabel
 end
 
@@ -265,6 +270,7 @@ local function buildUI()
 	buttonStroke.Parent = button
 
 	buildBackpackIcon(button)
+	PanelMotion.AnimateButton(button)
 
 	-- Purely a visual dimmer + input blocker for the 3D world behind it -- NOT a button. Closing
 	-- on an outside click is handled by an explicit screen-bounds check (see InventoryUI.Start),
@@ -330,6 +336,7 @@ local function buildUI()
 	closeButton.TextColor3 = Color3.new(1, 1, 1)
 	closeButton.ZIndex = 12
 	closeButton.Parent = panel
+	PanelMotion.AnimateButton(closeButton)
 
 	-- Coins readout, same row as the title, ending just before the close button.
 	local coinsHolder = Instance.new("Frame")
@@ -430,6 +437,7 @@ end
 function InventoryUI.Start()
 	local player = Players.LocalPlayer
 	local button, backdrop, panel, closeButton, slots, coinsLabel = buildUI()
+	local motion = PanelMotion.new(panel, backdrop)
 
 	local leaderstats = player:WaitForChild("leaderstats")
 	local coins = leaderstats:WaitForChild("Coins")
@@ -506,7 +514,7 @@ function InventoryUI.Start()
 	end
 
 	local function closePanel()
-		backdrop.Visible = false
+		motion.Hide()
 		if heartbeatConn then
 			heartbeatConn:Disconnect()
 			heartbeatConn = nil
@@ -518,7 +526,7 @@ function InventoryUI.Start()
 	end
 
 	local function openPanel()
-		backdrop.Visible = true
+		motion.Show()
 		refresh()
 		-- Keeps the panel live (equip highlight, new/removed tools, Coins) only while actually open.
 		if not heartbeatConn then

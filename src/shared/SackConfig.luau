@@ -15,9 +15,17 @@ return {
 	-- Physical sack prop.
 	SackBodySize = Vector3.new(1.6, 1.8, 1.3),
 	SackTieSize = Vector3.new(0.7, 0.35, 0.9),
-	SackColor = Color3.fromRGB(120, 72, 38),
-	SackTieColor = Color3.fromRGB(80, 46, 22),
 	PickupPromptDistance = 8,
+
+	-- Cosmetic color scheme -- SackSystem.newSackTool takes a color resolved from here
+	-- (PlayerUpgrades.GetCosmetic) at spawn time, falling back to Default for everyone until real
+	-- skins exist to buy. Adding a skin later is just one more entry in this table.
+	Cosmetics = {
+		Default = {
+			SackColor = Color3.fromRGB(120, 72, 38),
+			SackTieColor = Color3.fromRGB(80, 46, 22),
+		},
+	},
 
 	-- The pickup gesture, published as a real Animation asset via Studio's Clip Editor (the
 	-- KeyframeSequenceProvider auto-bake only ever produces a session-local id, not something a

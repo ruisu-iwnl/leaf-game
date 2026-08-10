@@ -4,14 +4,16 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LeavesCleanedStat = require(script.Parent.LeavesCleanedStat)
 local MoneySystem = require(script.Parent.MoneySystem)
+local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
 local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
 local SackSystem = require(script.Parent.SackSystem)
 
 -- Persists Coins, the per-player lifetime LeavesCleaned count, SackStorage (leaves currently held
--- in the sack UI, not yet turned into a physical sack), and every physical sack currently in the
+-- in the sack UI, not yet turned into a physical sack), every physical sack currently in the
 -- player's Backpack/equipped (as a leaf-count list -- see SackSystem.GetPlayerSackLeafCounts/
--- RestoreSacks) across sessions. Upgrades, areas, cosmetics, and season progress will get added
--- here once those systems exist to have something to save -- nothing to persist for them yet.
+-- RestoreSacks), and owned upgrades/perks/cosmetics (see PlayerUpgrades.luau) across sessions.
+-- Areas and season progress will get added here once those systems exist to have something to
+-- save -- nothing to persist for them yet.
 --
 -- ActiveSackCount itself is still NOT stored as a raw number -- it's derived by RestoreSacks
 -- incrementing it once per sack it actually rebuilds, so it can never drift from the real physical
@@ -73,6 +75,24 @@ local function loadPlayerData(player)
 	if typeof(result.SackLeafCounts) == "table" then
 		SackSystem.RestoreSacks(player, result.SackLeafCounts)
 	end
+
+	if typeof(result.UpgradeIds) == "table" then
+		for _, id in ipairs(result.UpgradeIds) do
+			PlayerUpgrades.GrantUpgrade(player, id)
+		end
+	end
+	if typeof(result.PerkIds) == "table" then
+		for _, id in ipairs(result.PerkIds) do
+			PlayerUpgrades.GrantPerk(player, id)
+		end
+	end
+	if typeof(result.Cosmetics) == "table" then
+		for toolName, cosmeticId in pairs(result.Cosmetics) do
+			if typeof(toolName) == "string" and typeof(cosmeticId) == "string" then
+				PlayerUpgrades.SetCosmetic(player, toolName, cosmeticId)
+			end
+		end
+	end
 end
 
 local function savePlayerData(player)
@@ -81,6 +101,9 @@ local function savePlayerData(player)
 		LeavesCleaned = LeavesCleanedStat.Get(player),
 		SackStorage = player:GetAttribute("SackStorage") or 0,
 		SackLeafCounts = SackSystem.GetPlayerSackLeafCounts(player),
+		UpgradeIds = PlayerUpgrades.GetOwnedUpgradeIds(player),
+		PerkIds = PlayerUpgrades.GetOwnedPerkIds(player),
+		Cosmetics = PlayerUpgrades.GetCosmetics(player),
 	}
 	local ok, err = pcall(function()
 		playerData:SetAsync(keyFor(player), data)

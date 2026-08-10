@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 
+local PanelMotion = require(script.Parent.PanelMotion)
 local UILayout = require(script.Parent.UILayout)
 
 -- Custom replacement for Roblox's default player list (hidden by CoinsUI.Start()) -- sits below
@@ -90,6 +91,7 @@ local function buildUI()
 	toggleButton.TextColor3 = Color3.new(1, 1, 1)
 	toggleButton.Parent = screenGui
 	applyPanelStyle(toggleButton, 10)
+	PanelMotion.AnimateButton(toggleButton)
 
 	local chevron = buildChevron(toggleButton)
 
@@ -138,6 +140,7 @@ local function newRow(container, player, localPlayer)
 	row.TextXAlignment = Enum.TextXAlignment.Right
 	row.TextColor3 = Color3.new(1, 1, 1)
 	row.Parent = container
+	PanelMotion.AnimateButton(row)
 
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = Color3.new(0, 0, 0)

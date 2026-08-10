@@ -60,9 +60,13 @@ function SackUI.Start()
 	local function refresh()
 		local storage = player:GetAttribute("SackStorage") or 0
 		local activeSacks = player:GetAttribute("ActiveSackCount") or 0
+		-- Server-replicated (PlayerUpgrades.luau) instead of the static config constant, since the
+		-- SackCapacity upgrade raises this per-player -- falls back to the base value for the brief
+		-- window before the server's first sync attribute arrives.
+		local maxActiveSacks = player:GetAttribute("SackMaxActiveSacks") or SackConfig.MaxActiveSacks
 		button.Text = string.format(
 			"\xF0\x9F\xA7\xBA %d/%d   \xF0\x9F\x8D\x82 %d/%d",
-			activeSacks, SackConfig.MaxActiveSacks,
+			activeSacks, maxActiveSacks,
 			storage, SackConfig.MaxCapacity
 		)
 	end
@@ -98,7 +102,8 @@ function SackUI.Start()
 	button.MouseButton1Click:Connect(function()
 		local storage = player:GetAttribute("SackStorage") or 0
 		local activeSacks = player:GetAttribute("ActiveSackCount") or 0
-		if storage <= 0 or activeSacks >= SackConfig.MaxActiveSacks then
+		local maxActiveSacks = player:GetAttribute("SackMaxActiveSacks") or SackConfig.MaxActiveSacks
+		if storage <= 0 or activeSacks >= maxActiveSacks then
 			flashReject()
 			return
 		end
@@ -109,6 +114,7 @@ function SackUI.Start()
 	refresh()
 	player:GetAttributeChangedSignal("SackStorage"):Connect(refresh)
 	player:GetAttributeChangedSignal("ActiveSackCount"):Connect(refresh)
+	player:GetAttributeChangedSignal("SackMaxActiveSacks"):Connect(refresh)
 end
 
 return SackUI

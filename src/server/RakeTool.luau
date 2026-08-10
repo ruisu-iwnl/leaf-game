@@ -4,6 +4,7 @@ local StarterPack = game:GetService("StarterPack")
 local Workspace = game:GetService("Workspace")
 
 local LeafSpawner = require(script.Parent.LeafSpawner)
+local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
 local RakeConfig = require(ReplicatedStorage.Shared.RakeConfig)
 
 -- Second leaf-collection tool alongside the Blower: instead of pushing leaves away, it drags
@@ -98,21 +99,26 @@ local function newPart(name, size, color, material)
 end
 
 -- Builds the one-and-only tool template. Roblox clones this into every player's Backpack
--- automatically (that's what StarterPack does), so this only ever needs to be built once.
+-- automatically (that's what StarterPack does), so this only ever needs to be built once. Always
+-- uses the Default cosmetic -- each clone gets recolored to its owning player's actual chosen skin
+-- the moment watchTool detects a real equip (see applyCosmetic below), since a single shared
+-- template can't know who it'll belong to ahead of time.
 local function buildTool()
 	local tool = Instance.new("Tool")
 	tool.Name = TOOL_NAME
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
 
-	local handle = newPart("Handle", RakeConfig.HandleSize, RakeConfig.HandleColor, Enum.Material.Wood)
+	local defaultColors = RakeConfig.Cosmetics.Default
+
+	local handle = newPart("Handle", RakeConfig.HandleSize, defaultColors.HandleColor, Enum.Material.Wood)
 	handle.Parent = tool
 
 	-- Where the decorative Grip cylinder sits, near the pole's near/top end -- also reused below
 	-- for Tool.Grip's own position offset, so the hand actually grips at the same spot the model
 	-- visually shows a hand-grip.
 	local gripOffsetZ = RakeConfig.HandleSize.Z / 2 - RakeConfig.GripSize.Z / 2 - 0.15
-	local grip = newPart("Grip", RakeConfig.GripSize, RakeConfig.GripColor, Enum.Material.Fabric)
+	local grip = newPart("Grip", RakeConfig.GripSize, defaultColors.GripColor, Enum.Material.Fabric)
 	grip.CFrame = handle.CFrame * CFrame.new(0, 0, gripOffsetZ)
 	grip.Parent = tool
 	weldTo(handle, grip)
@@ -120,14 +126,14 @@ local function buildTool()
 	-- Crossbar at the far end (local -Z, matching this project's "front = -Z" convention), with
 	-- a row of thin tines welded to it sticking further forward -- reads as a rake head at a glance
 	-- without needing a custom mesh.
-	local head = newPart("Head", RakeConfig.HeadSize, RakeConfig.HeadColor, Enum.Material.Metal)
+	local head = newPart("Head", RakeConfig.HeadSize, defaultColors.HeadColor, Enum.Material.Metal)
 	head.CFrame = handle.CFrame * CFrame.new(0, 0, -RakeConfig.HandleSize.Z / 2 - RakeConfig.HeadSize.Z / 2)
 	head.Parent = tool
 	weldTo(handle, head)
 
 	local tineSpacing = RakeConfig.HeadSize.X / (RakeConfig.TineCount - 1)
 	for i = 1, RakeConfig.TineCount do
-		local tine = newPart("Tine" .. i, RakeConfig.TineSize, RakeConfig.HeadColor, Enum.Material.Metal)
+		local tine = newPart("Tine" .. i, RakeConfig.TineSize, defaultColors.HeadColor, Enum.Material.Metal)
 		local xOffset = -RakeConfig.HeadSize.X / 2 + tineSpacing * (i - 1)
 		tine.CFrame = head.CFrame * CFrame.new(xOffset, 0, -RakeConfig.HeadSize.Z / 2 - RakeConfig.TineSize.Z / 2)
 		tine.Parent = tool
@@ -194,6 +200,34 @@ local function getAimOriginDirection(tool)
 	return rootPart.Position, direction.Unit
 end
 
+-- Recolors this specific clone to its owning player's currently-equipped skin -- called the moment
+-- watchTool detects a real equip, since the shared StarterPack template (see buildTool) has no way
+-- to know who it'll belong to ahead of time. Tines are direct children of the Tool itself (not of
+-- Head -- see buildTool), so they're matched by name rather than by parent.
+local function applyCosmetic(tool, player)
+	local colors = RakeConfig.Cosmetics[PlayerUpgrades.GetCosmetic(player, TOOL_NAME)] or RakeConfig.Cosmetics.Default
+
+	local handle = tool:FindFirstChild("Handle")
+	local grip = tool:FindFirstChild("Grip")
+	local head = tool:FindFirstChild("Head")
+
+	if handle then
+		handle.Color = colors.HandleColor
+	end
+	if grip then
+		grip.Color = colors.GripColor
+	end
+	if head then
+		head.Color = colors.HeadColor
+	end
+
+	for _, child in ipairs(tool:GetChildren()) do
+		if child:IsA("BasePart") and child.Name:match("^Tine%d+$") then
+			child.Color = colors.HeadColor
+		end
+	end
+end
+
 -- Watches one specific tool instance for the rest of its life -- same AncestryChanged
 -- equip/unequip reliability pattern as BlowerTool.watchTool (see that file's comment for why
 -- AncestryChanged specifically, over Backpack/PlayerAdded/ChildAdded).
@@ -201,6 +235,13 @@ local function watchTool(tool)
 	local head = tool:WaitForChild("Head")
 	local dustAttachment = head:WaitForChild("DustAttachment")
 	local dustEmitter = dustAttachment:WaitForChild("DustEmitter")
+
+	do
+		local initialPlayer = Players:GetPlayerFromCharacter(tool.Parent)
+		if initialPlayer then
+			applyCosmetic(tool, initialPlayer)
+		end
+	end
 
 	local onCooldown = false
 	-- RakeCooldownFraction: 1 the instant it's used, ticking down to 0 over RakeCooldownDuration --
@@ -211,13 +252,15 @@ local function watchTool(tool)
 	-- Ticks the cooldown bar down to 0 over RakeCooldownDuration seconds, then unlocks. task.wait()
 	-- with no argument resumes next frame, same per-frame granularity as Blower's Heartbeat-driven
 	-- heat, without needing a standing connection for a lockout that's only ever running briefly.
-	local function runCooldown()
+	local function runCooldown(player)
 		onCooldown = true
 		tool:SetAttribute("RakeOnCooldown", true)
+		local effectiveConfig = player and PlayerUpgrades.GetEffectiveConfig(player, TOOL_NAME) or RakeConfig
+		local duration = effectiveConfig.RakeCooldownDuration
 		local startTime = os.clock()
 		while true do
 			local elapsed = os.clock() - startTime
-			local fraction = math.clamp(1 - elapsed / RakeConfig.RakeCooldownDuration, 0, 1)
+			local fraction = math.clamp(1 - elapsed / duration, 0, 1)
 			tool:SetAttribute("RakeCooldownFraction", fraction)
 			if fraction <= 0 then
 				break
@@ -229,14 +272,15 @@ local function watchTool(tool)
 	end
 
 	local function performRake()
+		local player = Players:GetPlayerFromCharacter(tool.Parent)
 		local origin, direction = getAimOriginDirection(tool)
 		if origin then
-			local player = Players:GetPlayerFromCharacter(tool.Parent)
-			LeafSpawner.ApplyRake(player, origin, direction, RakeConfig)
+			local effectiveConfig = player and PlayerUpgrades.GetEffectiveConfig(player, TOOL_NAME) or RakeConfig
+			LeafSpawner.ApplyRake(player, origin, direction, effectiveConfig)
 			dustEmitter:Emit(RakeConfig.ParticleBurstCount)
 			playSweepGesture(tool.Parent)
 		end
-		task.spawn(runCooldown)
+		task.spawn(runCooldown, player)
 	end
 
 	tool.Activated:Connect(function()
@@ -244,6 +288,13 @@ local function watchTool(tool)
 			return
 		end
 		performRake()
+	end)
+
+	tool.AncestryChanged:Connect(function()
+		local player = Players:GetPlayerFromCharacter(tool.Parent)
+		if player then
+			applyCosmetic(tool, player)
+		end
 	end)
 end
 

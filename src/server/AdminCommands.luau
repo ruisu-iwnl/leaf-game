@@ -5,7 +5,10 @@ local TextChatService = game:GetService("TextChatService")
 
 local AdminConfig = require(ReplicatedStorage.Shared.AdminConfig)
 local MoneySystem = require(script.Parent.MoneySystem)
+local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
+local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
 local SackSystem = require(script.Parent.SackSystem)
+local UpgradeConfig = require(ReplicatedStorage.Shared.UpgradeConfig)
 
 -- Lightweight dev/testing commands, e.g. ":addmoney me 100". Restricted to the game's owner
 -- (game.CreatorId) plus any extra usernames listed in AdminConfig.ExtraAdmins, PLUS anyone
@@ -128,6 +131,87 @@ commands.fixsacks = function(admin, args)
 		"[Admin] %s resynced %s's ActiveSackCount to match their real sacks (now %d)",
 		admin.Name, target.Name, target:GetAttribute("ActiveSackCount") or 0
 	))
+end
+
+-- Upgrade/perk grant-and-revoke commands for testing the store's effects before the store itself
+-- exists (see PlayerUpgrades.luau) -- e.g. ":addupgrade me RakeCooldown", ":addperk me DoubleGrab".
+-- Same resolveTarget pattern as the money commands; ids are matched case-insensitively against the
+-- UpgradeConfig/PerkConfig catalogs so a typo doesn't silently grant nothing.
+local function findCatalogId(catalog, query)
+	if not query then
+		return nil
+	end
+	local lowered = query:lower()
+	for id in pairs(catalog) do
+		if id:lower() == lowered then
+			return id
+		end
+	end
+	return nil
+end
+
+local function catalogIdList(catalog)
+	local ids = {}
+	for id in pairs(catalog) do
+		table.insert(ids, id)
+	end
+	return table.concat(ids, ", ")
+end
+
+commands.addupgrade = function(admin, args)
+	local target = resolveTarget(admin, args[1])
+	if not target then
+		return
+	end
+	local id = findCatalogId(UpgradeConfig, args[2])
+	if not id then
+		warn(string.format("[Admin] usage: :addupgrade <player|me> <id>. Known ids: %s", catalogIdList(UpgradeConfig)))
+		return
+	end
+	PlayerUpgrades.GrantUpgrade(target, id)
+	print(string.format("[Admin] %s granted %s the %s upgrade", admin.Name, target.Name, id))
+end
+
+commands.removeupgrade = function(admin, args)
+	local target = resolveTarget(admin, args[1])
+	if not target then
+		return
+	end
+	local id = findCatalogId(UpgradeConfig, args[2])
+	if not id then
+		warn(string.format("[Admin] usage: :removeupgrade <player|me> <id>. Known ids: %s", catalogIdList(UpgradeConfig)))
+		return
+	end
+	PlayerUpgrades.RemoveUpgrade(target, id)
+	print(string.format("[Admin] %s removed %s's %s upgrade", admin.Name, target.Name, id))
+end
+
+commands.addperk = function(admin, args)
+	local target = resolveTarget(admin, args[1])
+	if not target then
+		return
+	end
+	local id = findCatalogId(PerkConfig, args[2])
+	if not id then
+		warn(string.format("[Admin] usage: :addperk <player|me> <id>. Known ids: %s", catalogIdList(PerkConfig)))
+		return
+	end
+	PlayerUpgrades.GrantPerk(target, id)
+	print(string.format("[Admin] %s granted %s the %s perk", admin.Name, target.Name, id))
+end
+
+commands.removeperk = function(admin, args)
+	local target = resolveTarget(admin, args[1])
+	if not target then
+		return
+	end
+	local id = findCatalogId(PerkConfig, args[2])
+	if not id then
+		warn(string.format("[Admin] usage: :removeperk <player|me> <id>. Known ids: %s", catalogIdList(PerkConfig)))
+		return
+	end
+	PlayerUpgrades.RemovePerk(target, id)
+	print(string.format("[Admin] %s removed %s's %s perk", admin.Name, target.Name, id))
 end
 
 -- Shared by both the RemoteEvent path and the (bonus, possibly-inert) chat listeners below.

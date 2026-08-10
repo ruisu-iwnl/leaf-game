@@ -9,9 +9,12 @@ local LeavesCleanedStat = require(script.LeavesCleanedStat)
 local MoneyConfig = require(ReplicatedStorage.Shared.MoneyConfig)
 local MoneySystem = require(script.MoneySystem)
 local PlayerSetup = require(script.PlayerSetup)
+local PlayerUpgrades = require(script.PlayerUpgrades)
+local PurchaseSystem = require(script.PurchaseSystem)
 local RakeTool = require(script.RakeTool)
 local SackSystem = require(script.SackSystem)
 local SaveSystem = require(script.SaveSystem)
+local StoreSystem = require(script.StoreSystem)
 local WindSystem = require(script.WindSystem)
 
 -- WindSystem first so the WindDirection attribute is already set before the first leaves spawn.
@@ -22,15 +25,21 @@ SackSystem.Start()
 PlayerSetup.Start()
 MoneySystem.Start()
 LeavesCleanedStat.Start()
+PlayerUpgrades.Start()
 SaveSystem.Start()
 DayNightCycle.Start()
 BlowerTool.Start()
+PurchaseSystem.Start()
 RakeTool.Start()
+StoreSystem.Start()
 AdminCommands.Start()
 
 -- The one place LeafSpawner's leaf-delivery events get turned into Coins -- keeps LeafSpawner
--- itself decoupled from Coins/MoneySystem as a concept (see LeafSpawner.OnLeafDelivered).
+-- itself decoupled from Coins/MoneySystem as a concept (see LeafSpawner.OnLeafDelivered). Coins
+-- are scaled by the player's coin-affecting perks (e.g. DoubleGrab) here, in the one place every
+-- payout already routes through -- perks never need touching MoneySystem or LeafSpawner directly.
 LeafSpawner.OnLeafDelivered(function(player, count)
-	MoneySystem.AddCoins(player, count * MoneyConfig.CoinsPerLeaf)
+	local coins = count * MoneyConfig.CoinsPerLeaf * PlayerUpgrades.GetCoinsMultiplier(player)
+	MoneySystem.AddCoins(player, coins)
 	LeavesCleanedStat.Add(player, count)
 end)

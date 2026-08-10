@@ -5,6 +5,7 @@ local Workspace = game:GetService("Workspace")
 
 local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
 local LeafSpawner = require(script.Parent.LeafSpawner)
+local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
 
 local SackSystem = {}
 
@@ -141,8 +142,12 @@ end
 -- position directly and sets both parts' CFrames from it up front, rather than building at the
 -- origin and repositioning after -- Tool isn't a Model/PVInstance, so it has no PivotTo, and a
 -- WeldConstraint only keeps two parts together through physics simulation, not through a direct
--- CFrame assignment after the fact.
-local function newSackTool(leafCount, position, ownerUserId)
+-- CFrame assignment after the fact. `colors` (SackConfig.Cosmetics.<id>) is resolved by the
+-- caller, which already knows the owning player -- this function stays agnostic to cosmetics as a
+-- concept, same as it's agnostic to everything else about who owns it beyond ownerUserId.
+local function newSackTool(leafCount, position, ownerUserId, colors)
+	colors = colors or SackConfig.Cosmetics.Default
+
 	local tool = Instance.new("Tool")
 	tool.Name = SACK_TOOL_NAME
 	tool.RequiresHandle = true
@@ -155,7 +160,7 @@ local function newSackTool(leafCount, position, ownerUserId)
 	local handle = Instance.new("Part")
 	handle.Name = "Handle"
 	handle.Size = SackConfig.SackBodySize
-	handle.Color = SackConfig.SackColor
+	handle.Color = colors.SackColor
 	handle.Material = Enum.Material.Fabric
 	handle.CanCollide = true
 	handle.CastShadow = true
@@ -165,7 +170,7 @@ local function newSackTool(leafCount, position, ownerUserId)
 	local tie = Instance.new("Part")
 	tie.Name = "Tie"
 	tie.Size = SackConfig.SackTieSize
-	tie.Color = SackConfig.SackTieColor
+	tie.Color = colors.SackTieColor
 	tie.Material = Enum.Material.Fabric
 	tie.CanCollide = false
 	tie.CastShadow = false
@@ -269,10 +274,11 @@ function SackSystem.RestoreSacks(player, leafCounts)
 
 	local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	local position = rootPart and rootPart.Position or Vector3.new(0, 0, 0)
+	local colors = SackConfig.Cosmetics[PlayerUpgrades.GetCosmetic(player, SACK_TOOL_NAME)] or SackConfig.Cosmetics.Default
 
 	for _, leafCount in ipairs(leafCounts) do
 		if leafCount > 0 then
-			local tool = newSackTool(leafCount, position, player.UserId)
+			local tool = newSackTool(leafCount, position, player.UserId, colors)
 			tool.Parent = backpack
 		end
 	end
@@ -527,7 +533,8 @@ local function onSpawnSack(player)
 	end
 
 	local activeSackCount = player:GetAttribute("ActiveSackCount") or 0
-	if activeSackCount >= SackConfig.MaxActiveSacks then
+	local effectiveConfig = PlayerUpgrades.GetEffectiveConfig(player, SACK_TOOL_NAME)
+	if activeSackCount >= effectiveConfig.MaxActiveSacks then
 		return
 	end
 
@@ -541,7 +548,8 @@ local function onSpawnSack(player)
 	local groundY = findGroundY(dropPosition)
 	local finalPosition = Vector3.new(dropPosition.X, groundY + SackConfig.SackBodySize.Y / 2, dropPosition.Z)
 
-	local tool = newSackTool(storage, finalPosition, player.UserId)
+	local colors = SackConfig.Cosmetics[PlayerUpgrades.GetCosmetic(player, SACK_TOOL_NAME)] or SackConfig.Cosmetics.Default
+	local tool = newSackTool(storage, finalPosition, player.UserId, colors)
 	tool.Parent = Workspace
 	playSpawnPoofVFX(finalPosition)
 	playGesture(character, tieSackAnimation, tieSackTracks)

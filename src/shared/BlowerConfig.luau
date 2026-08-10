@@ -1,7 +1,15 @@
 return {
-	BodyColor = Color3.fromRGB(230, 120, 20),
-	GripColor = Color3.fromRGB(40, 40, 40),
-	NozzleColor = Color3.fromRGB(60, 60, 60),
+	-- Cosmetic color scheme, applied to both the handheld tool and the worn backpack prop --
+	-- BlowerTool.luau resolves the owning player's chosen skin (PlayerUpgrades.GetCosmetic) and
+	-- looks it up here, falling back to Default for everyone until real skins exist to buy. Adding
+	-- a skin later is just one more entry in this table, no code changes in BlowerTool.luau itself.
+	Cosmetics = {
+		Default = {
+			BodyColor = Color3.fromRGB(230, 120, 20),
+			GripColor = Color3.fromRGB(40, 40, 40),
+			NozzleColor = Color3.fromRGB(60, 60, 60),
+		},
+	},
 
 	BodySize = Vector3.new(0.9, 0.9, 2.2),
 	GripSize = Vector3.new(0.5, 1, 0.5),

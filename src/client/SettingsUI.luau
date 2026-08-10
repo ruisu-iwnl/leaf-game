@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 
+local PanelMotion = require(script.Parent.PanelMotion)
 local PerformanceMode = require(script.Parent.PerformanceMode)
 local TopBar = require(script.Parent.TopBar)
 
@@ -23,6 +24,7 @@ local function buildUI()
 	-- up overlapping regardless of how wide the Coins number gets -- this module only wires up
 	-- what happens when it's clicked.
 	local gearButton = TopBar.Build().gearButton
+	PanelMotion.AnimateButton(gearButton)
 
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "SettingsUI"
@@ -92,6 +94,7 @@ local function buildUI()
 	closeButton.TextColor3 = Color3.new(1, 1, 1)
 	closeButton.ZIndex = 12
 	closeButton.Parent = panel
+	PanelMotion.AnimateButton(closeButton)
 
 	local row = Instance.new("Frame")
 	row.Name = "FastModeRow"
@@ -123,6 +126,7 @@ local function buildUI()
 	toggleTrack.Text = ""
 	toggleTrack.ZIndex = 12
 	toggleTrack.Parent = row
+	PanelMotion.AnimateButton(toggleTrack)
 
 	local trackCorner = Instance.new("UICorner")
 	trackCorner.CornerRadius = UDim.new(1, 0)
@@ -160,6 +164,7 @@ end
 
 function SettingsUI.Start()
 	local gearButton, backdrop, panel, closeButton, toggleTrack, knob = buildUI()
+	local motion = PanelMotion.new(panel, backdrop)
 
 	local isOn = PerformanceMode.IsEnabled()
 	setToggleVisual(toggleTrack, knob, isOn)
@@ -174,7 +179,7 @@ function SettingsUI.Start()
 	end
 
 	local function closeModal()
-		backdrop.Visible = false
+		motion.Hide()
 		if outsideClickConn then
 			outsideClickConn:Disconnect()
 			outsideClickConn = nil
@@ -182,7 +187,7 @@ function SettingsUI.Start()
 	end
 
 	local function openModal()
-		backdrop.Visible = true
+		motion.Show()
 		-- Explicit screen-bounds check instead of click passthrough -- see the Backdrop comment
 		-- in buildUI for why.
 		if not outsideClickConn then

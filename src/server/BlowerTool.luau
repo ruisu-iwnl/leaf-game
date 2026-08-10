@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 
 local BlowerConfig = require(ReplicatedStorage.Shared.BlowerConfig)
 local LeafSpawner = require(script.Parent.LeafSpawner)
+local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
 
 local BlowerTool = {}
 
@@ -34,22 +35,27 @@ local function newPart(name, size, color, material)
 end
 
 -- Builds the one-and-only tool template. Roblox clones this into every player's Backpack
--- automatically (that's what StarterPack does), so this only ever needs to be built once.
+-- automatically (that's what StarterPack does), so this only ever needs to be built once. Always
+-- uses the Default cosmetic -- each clone gets recolored to its owning player's actual chosen skin
+-- the moment watchTool detects a real equip (see applyCosmetic below), since a single shared
+-- template can't know who it'll belong to ahead of time.
 local function buildTool()
 	local tool = Instance.new("Tool")
 	tool.Name = TOOL_NAME
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
 
-	local handle = newPart("Handle", BlowerConfig.BodySize, BlowerConfig.BodyColor)
+	local defaultColors = BlowerConfig.Cosmetics.Default
+
+	local handle = newPart("Handle", BlowerConfig.BodySize, defaultColors.BodyColor)
 	handle.Parent = tool
 
-	local accent = newPart("Accent", BlowerConfig.AccentSize, BlowerConfig.GripColor)
+	local accent = newPart("Accent", BlowerConfig.AccentSize, defaultColors.GripColor)
 	accent.CFrame = handle.CFrame * CFrame.new(0, 0, 0.4)
 	accent.Parent = tool
 	weldTo(handle, accent)
 
-	local grip = newPart("Grip", BlowerConfig.GripSize, BlowerConfig.GripColor)
+	local grip = newPart("Grip", BlowerConfig.GripSize, defaultColors.GripColor)
 	grip.CFrame = handle.CFrame * CFrame.new(0, -0.7, 0.4)
 	grip.Parent = tool
 	weldTo(handle, grip)
@@ -59,7 +65,7 @@ local function buildTool()
 	gripHoseAttachment.Position = Vector3.new(0, -BlowerConfig.GripSize.Y / 2, 0)
 	gripHoseAttachment.Parent = grip
 
-	local nozzle = newPart("Nozzle", BlowerConfig.NozzleSize, BlowerConfig.NozzleColor)
+	local nozzle = newPart("Nozzle", BlowerConfig.NozzleSize, defaultColors.NozzleColor)
 	nozzle.CFrame = handle.CFrame * CFrame.new(0, 0, -BlowerConfig.BodySize.Z / 2 - BlowerConfig.NozzleSize.Z / 2)
 	nozzle.Parent = tool
 	weldTo(handle, nozzle)
@@ -102,7 +108,9 @@ end
 -- currently equipped). Uses WaitForChild (not FindFirstChild) for the torso since R15 body parts
 -- can still be streaming in when CharacterAdded first fires -- an immediate lookup losing that
 -- race was why the backpack sometimes silently never got created.
-local function attachBackpack(character)
+-- `player` resolves which cosmetic skin to use (PlayerUpgrades.GetCosmetic) -- everyone gets
+-- Default until real skins exist to buy.
+local function attachBackpack(character, player)
 	if character:FindFirstChild(BACKPACK_NAME) then
 		return
 	end
@@ -114,46 +122,48 @@ local function attachBackpack(character)
 		return
 	end
 
+	local colors = BlowerConfig.Cosmetics[PlayerUpgrades.GetCosmetic(player, TOOL_NAME)] or BlowerConfig.Cosmetics.Default
+
 	local tankSize = BlowerConfig.BackpackTankSize
 	local backOffset = tankSize.Z / 2 + 0.15
 
-	local pack = newPart(BACKPACK_NAME, tankSize, BlowerConfig.BodyColor)
+	local pack = newPart(BACKPACK_NAME, tankSize, colors.BodyColor)
 	pack.CFrame = torso.CFrame * CFrame.new(0, 0.1, backOffset)
 	pack.Parent = character
 	weldTo(torso, pack)
 
-	local trim = newPart("BackpackTrim", BlowerConfig.BackpackTrimSize, BlowerConfig.GripColor)
+	local trim = newPart("BackpackTrim", BlowerConfig.BackpackTrimSize, colors.GripColor)
 	trim.CFrame = torso.CFrame * CFrame.new(0, 0.1 - tankSize.Y / 2, backOffset)
 	trim.Parent = character
 	weldTo(torso, trim)
 
 	local motorSize = BlowerConfig.BackpackMotorSize
-	local motor = newPart("BackpackMotor", motorSize, BlowerConfig.GripColor)
+	local motor = newPart("BackpackMotor", motorSize, colors.GripColor)
 	motor.Shape = Enum.PartType.Ball
 	motor.CFrame = torso.CFrame * CFrame.new(0, 0.1 + tankSize.Y / 2 + motorSize.Y / 2 - 0.35, backOffset)
 	motor.Parent = character
 	weldTo(torso, motor)
 
 	local pullHandleSize = BlowerConfig.PullHandleSize
-	local pullHandle = newPart("BackpackPullHandle", pullHandleSize, BlowerConfig.NozzleColor)
+	local pullHandle = newPart("BackpackPullHandle", pullHandleSize, colors.NozzleColor)
 	pullHandle.Shape = Enum.PartType.Ball
 	pullHandle.CFrame = torso.CFrame * CFrame.new(0.3, 0.1 + tankSize.Y / 2 + 0.05, backOffset - motorSize.Z / 2)
 	pullHandle.Parent = character
 	weldTo(torso, pullHandle)
 
 	local exhaustSize = BlowerConfig.BackpackExhaustSize
-	local exhaust = newPart("BackpackExhaust", exhaustSize, BlowerConfig.NozzleColor)
+	local exhaust = newPart("BackpackExhaust", exhaustSize, colors.NozzleColor)
 	exhaust.CFrame = torso.CFrame * CFrame.new(0.5, 0.1 + tankSize.Y / 2 - 0.2, backOffset - exhaustSize.Z / 2)
 	exhaust.Parent = character
 	weldTo(torso, exhaust)
 
 	local ventSize = BlowerConfig.BackpackVentSize
-	local leftVent = newPart("BackpackVentLeft", ventSize, BlowerConfig.GripColor)
+	local leftVent = newPart("BackpackVentLeft", ventSize, colors.GripColor)
 	leftVent.CFrame = torso.CFrame * CFrame.new(tankSize.X / 2 - 0.02, 0.1, backOffset - tankSize.Z / 2 + 0.05)
 	leftVent.Parent = character
 	weldTo(torso, leftVent)
 
-	local rightVent = newPart("BackpackVentRight", ventSize, BlowerConfig.GripColor)
+	local rightVent = newPart("BackpackVentRight", ventSize, colors.GripColor)
 	rightVent.CFrame = torso.CFrame * CFrame.new(-(tankSize.X / 2 - 0.02), 0.1, backOffset - tankSize.Z / 2 + 0.05)
 	rightVent.Parent = character
 	weldTo(torso, rightVent)
@@ -174,12 +184,12 @@ local function attachBackpack(character)
 	packHoseAttachment.Position = Vector3.new(0, tankSize.Y / 2 - 0.15, tankSize.Z / 2)
 	packHoseAttachment.Parent = pack
 
-	local leftStrap = newPart("BackpackStrapLeft", BlowerConfig.StrapSize, BlowerConfig.GripColor, Enum.Material.Fabric)
+	local leftStrap = newPart("BackpackStrapLeft", BlowerConfig.StrapSize, colors.GripColor, Enum.Material.Fabric)
 	leftStrap.CFrame = torso.CFrame * CFrame.new(0.5, 0.3, -0.1)
 	leftStrap.Parent = character
 	weldTo(torso, leftStrap)
 
-	local rightStrap = newPart("BackpackStrapRight", BlowerConfig.StrapSize, BlowerConfig.GripColor, Enum.Material.Fabric)
+	local rightStrap = newPart("BackpackStrapRight", BlowerConfig.StrapSize, colors.GripColor, Enum.Material.Fabric)
 	rightStrap.CFrame = torso.CFrame * CFrame.new(-0.5, 0.3, -0.1)
 	rightStrap.Parent = character
 	weldTo(torso, rightStrap)
@@ -223,6 +233,31 @@ local function setIndicatorLight(character, isOn)
 				waitedLight.Color = isOn and BlowerConfig.LightColorOn or BlowerConfig.LightColorOff
 			end
 		end)
+	end
+end
+
+-- Recolors this specific clone to its owning player's currently-equipped skin -- called the moment
+-- watchTool detects a real equip (see the AncestryChanged handler below), since the shared
+-- StarterPack template (see buildTool) has no way to know who it'll belong to ahead of time.
+local function applyCosmetic(tool, player)
+	local colors = BlowerConfig.Cosmetics[PlayerUpgrades.GetCosmetic(player, TOOL_NAME)] or BlowerConfig.Cosmetics.Default
+
+	local handle = tool:FindFirstChild("Handle")
+	local accent = tool:FindFirstChild("Accent")
+	local grip = tool:FindFirstChild("Grip")
+	local nozzle = tool:FindFirstChild("Nozzle")
+
+	if handle then
+		handle.Color = colors.BodyColor
+	end
+	if accent then
+		accent.Color = colors.GripColor
+	end
+	if grip then
+		grip.Color = colors.GripColor
+	end
+	if nozzle then
+		nozzle.Color = colors.NozzleColor
 	end
 end
 
@@ -307,7 +342,8 @@ local function watchTool(tool)
 			local origin, direction = getAimOriginDirection(tool, nozzle)
 			if origin then
 				local player = Players:GetPlayerFromCharacter(tool.Parent)
-				LeafSpawner.ApplyBlow(player, origin, direction, BlowerConfig)
+				local effectiveConfig = player and PlayerUpgrades.GetEffectiveConfig(player, TOOL_NAME) or BlowerConfig
+				LeafSpawner.ApplyBlow(player, origin, direction, effectiveConfig)
 			end
 			task.wait(BlowerConfig.BlowInterval)
 		end
@@ -337,23 +373,26 @@ local function watchTool(tool)
 	-- Runs every frame regardless of blowing state, since cooling has to happen while idle too.
 	-- Replication is throttled to whenever the fraction actually moves (rounded), not every frame.
 	local function updateHeat(dt)
+		local player = Players:GetPlayerFromCharacter(equippedCharacter)
+		local effectiveConfig = player and PlayerUpgrades.GetEffectiveConfig(player, TOOL_NAME) or BlowerConfig
+
 		if blowing then
-			heat = math.min(BlowerConfig.OverheatMax, heat + BlowerConfig.HeatGainPerSecond * dt)
-			if heat >= BlowerConfig.OverheatMax and not overheated then
+			heat = math.min(effectiveConfig.OverheatMax, heat + effectiveConfig.HeatGainPerSecond * dt)
+			if heat >= effectiveConfig.OverheatMax and not overheated then
 				overheated = true
 				toggledOn = false
 				stopBlowing()
 				tool:SetAttribute("Overheated", true)
 			end
 		else
-			heat = math.max(0, heat - BlowerConfig.HeatCoolPerSecond * dt)
-			if overheated and heat <= BlowerConfig.OverheatResumeThreshold then
+			heat = math.max(0, heat - effectiveConfig.HeatCoolPerSecond * dt)
+			if overheated and heat <= effectiveConfig.OverheatResumeThreshold then
 				overheated = false
 				tool:SetAttribute("Overheated", false)
 			end
 		end
 
-		local fraction = heat / BlowerConfig.OverheatMax
+		local fraction = heat / effectiveConfig.OverheatMax
 		if math.abs(fraction - lastSentFraction) >= 0.002 then
 			lastSentFraction = fraction
 			tool:SetAttribute("HeatFraction", fraction)
@@ -380,6 +419,10 @@ local function watchTool(tool)
 	tool.AncestryChanged:Connect(function()
 		if isEquippedByPlayer(tool) then
 			equippedCharacter = tool.Parent
+			local player = Players:GetPlayerFromCharacter(equippedCharacter)
+			if player then
+				applyCosmetic(tool, player)
+			end
 			createHose()
 		else
 			toggledOn = false
@@ -400,11 +443,11 @@ local function onWorkspaceDescendantAdded(descendant)
 	end
 end
 
-local function onCharacterAdded(character)
-	attachBackpack(character)
-end
-
 local function onPlayerAdded(player)
+	local function onCharacterAdded(character)
+		attachBackpack(character, player)
+	end
+
 	player.CharacterAdded:Connect(onCharacterAdded)
 	if player.Character then
 		onCharacterAdded(player.Character)

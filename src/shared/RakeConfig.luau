@@ -1,7 +1,14 @@
 return {
-	HandleColor = Color3.fromRGB(120, 80, 45),
-	GripColor = Color3.fromRGB(60, 50, 45),
-	HeadColor = Color3.fromRGB(80, 80, 85),
+	-- Cosmetic color scheme -- RakeTool.luau resolves the owning player's chosen skin
+	-- (PlayerUpgrades.GetCosmetic) and looks it up here, falling back to Default for everyone
+	-- until real skins exist to buy. Adding a skin later is just one more entry in this table.
+	Cosmetics = {
+		Default = {
+			HandleColor = Color3.fromRGB(120, 80, 45),
+			GripColor = Color3.fromRGB(60, 50, 45),
+			HeadColor = Color3.fromRGB(80, 80, 85),
+		},
+	},
 
 	-- Long pole (like a standard real-world rake) and a wider head/tine spread than the first pass.
 	-- Held vertically for now -- see RakeTool.luau's Tool.Grip -- since a proper two-handed grip is

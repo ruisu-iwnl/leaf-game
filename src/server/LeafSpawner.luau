@@ -42,11 +42,11 @@ local lastPlayerPositions = {} -- player -> Vector3, used to gate disturbance on
 local started = false
 local deliveryListeners = {}
 
--- Fired whenever leaves land in the cleanup zone with a known delivering player (blown in, or a
--- sack drop-off) -- kept as a plain callback list rather than requiring MoneySystem directly, so
--- this module still doesn't need to know Coins/players exist as a concept, just that "someone"
--- may be listening. Deliveries with no attributable player (e.g. wind-drifted, nobody blowing)
--- simply never fire this.
+-- Fired whenever leaves land in the cleanup zone with a known delivering player (blown in, raked
+-- in, footstep-nudged in, or a sack drop-off) -- kept as a plain callback list rather than
+-- requiring MoneySystem directly, so this module still doesn't need to know Coins/players exist as
+-- a concept, just that "someone" may be listening. Only truly unattributable deliveries (no player
+-- anywhere in the causal chain) skip this.
 local function notifyDelivery(player, count)
 	if not player then
 		return
@@ -449,8 +449,9 @@ end
 
 -- Core "glide to a new resting spot" mechanic shared by the small footstep wind-disturbance nudge
 -- and the blower's much bigger push -- only the distance/duration/lift/spin differ between them.
--- `player` (optional, nil for footstep nudges) is who gets credited with the coin reward if this
--- glide happens to land the leaf in the cleanup zone.
+-- `player` (optional -- nil is still valid for any future caller with no attributable player) is
+-- who gets credited with the coin reward if this glide happens to land the leaf in the cleanup
+-- zone. Footstep nudges now pass the nearby player through here too (see triggerDisturbance).
 --
 -- Same replicate-parameters-once approach as beginFall -- see the top-of-file note.
 local function startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees, player)
@@ -563,7 +564,11 @@ end
 -- Pushes a resting leaf to an actual new spot a short distance away (not back to where it
 -- started) so repeated gusts genuinely relocate it over time instead of springing back like
 -- a boomerang. Guarded by rest.disturbing so a lingering player doesn't restart it mid-glide.
-local function triggerDisturbance(leaf, fromPosition)
+-- `player` (the one whose footsteps caused this) gets credited with coins if the nudge happens to
+-- land the leaf in the cleanup zone -- same as any other delivery method, just previously missing
+-- here, which is exactly why a movement-nudged leaf landing in the zone still counted toward zone
+-- progress/LeavesCleaned (that part never depended on player) but paid out nothing.
+local function triggerDisturbance(leaf, fromPosition, player)
 	local rest = restingLeaves[leaf]
 	if not rest or rest.disturbing then
 		return
@@ -585,7 +590,7 @@ local function triggerDisturbance(leaf, fromPosition)
 	local duration = LeafConfig.WindDurationMin + math.random() * (LeafConfig.WindDurationMax - LeafConfig.WindDurationMin)
 	local spinDegrees = LeafConfig.WindSpinDegreesMin + math.random() * (LeafConfig.WindSpinDegreesMax - LeafConfig.WindSpinDegreesMin)
 
-	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees)
+	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees, player)
 end
 
 -- Same idea, but with the blower's much bigger distance/duration, and pushed along a fixed
@@ -749,7 +754,7 @@ local function runWindDisturbanceLoop()
 				if movedDistance > LeafConfig.WindMinMoveDistance then
 					local nearbyParts = Workspace:GetPartBoundsInRadius(position, LeafConfig.WindDisturbRadius, overlapParams)
 					for _, part in ipairs(nearbyParts) do
-						triggerDisturbance(part, position)
+						triggerDisturbance(part, position, player)
 					end
 				end
 			end

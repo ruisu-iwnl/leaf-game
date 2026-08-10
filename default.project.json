@@ -1236,6 +1236,109 @@
             }
           }
         }
+      },
+
+      "Booth": {
+        "$className": "Model",
+
+        "Counter": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [25, 1.5, 14, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.4, 0.25, 0.15],
+            "Material": "WoodPlanks",
+            "Size": [6, 3, 1.5]
+          }
+        },
+
+        "PostFrontLeft": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [22, 4, 14, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.3608, 0.251, 0.2],
+            "Material": "Wood",
+            "Size": [0.5, 8, 0.5]
+          }
+        },
+
+        "PostFrontRight": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [28, 4, 14, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.3608, 0.251, 0.2],
+            "Material": "Wood",
+            "Size": [0.5, 8, 0.5]
+          }
+        },
+
+        "PostBackLeft": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [22, 4, 19, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.3608, 0.251, 0.2],
+            "Material": "Wood",
+            "Size": [0.5, 8, 0.5]
+          }
+        },
+
+        "PostBackRight": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CFrame": [28, 4, 19, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.3608, 0.251, 0.2],
+            "Material": "Wood",
+            "Size": [0.5, 8, 0.5]
+          }
+        },
+
+        "Canopy": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "CFrame": [25, 8.2, 16.5, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.75, 0.35, 0.12],
+            "Material": "Fabric",
+            "Size": [7.4, 0.4, 6.4]
+          }
+        },
+
+        "Sign": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "CFrame": [25, 6, 13.2, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+            "Color": [0.95, 0.93, 0.85],
+            "Material": "WoodPlanks",
+            "Size": [3, 1, 0.2]
+          },
+
+          "Text": {
+            "$className": "SurfaceGui",
+            "$properties": {
+              "Face": "Front",
+              "LightInfluence": 0
+            },
+
+            "Label": {
+              "$className": "TextLabel",
+              "$properties": {
+                "BackgroundTransparency": 1,
+                "Font": "SourceSansBold",
+                "Size": {"UDim2": [[1, 0], [1, 0]]},
+                "Text": "Shop",
+                "TextColor3": [0.15, 0.1, 0.05],
+                "TextScaled": true
+              }
+            }
+          }
+        }
       }
     },
 
