@@ -228,6 +228,15 @@ function SackSystem.GetPlayerSackLeafCounts(player)
 	return counts
 end
 
+-- Public: recalculates ActiveSackCount from the REAL sack Tools this player currently has,
+-- overwriting whatever the attribute happened to read before -- self-heals any drift between the
+-- counter and reality (which is exactly what causes the UI showing "2/3" with nothing actually in
+-- the hotbar), regardless of what caused it. Used automatically at the end of RestoreSacks, and
+-- exposed for AdminCommands' :fixsacks in case a desync ever turns up some other way.
+function SackSystem.ResyncActiveSackCount(player)
+	player:SetAttribute("ActiveSackCount", #SackSystem.GetPlayerSackLeafCounts(player))
+end
+
 -- Public: recreates physical sacks straight into this player's Backpack from a saved leaf-count
 -- list (see GetPlayerSackLeafCounts) -- called once by SaveSystem right after a player's data
 -- loads in. Placed directly into Backpack rather than dropped in the world via the pickup prompt,
@@ -238,6 +247,21 @@ function SackSystem.RestoreSacks(player, leafCounts)
 		return
 	end
 
+	-- Roblox destroys and recreates Backpack (re-cloning StarterPack fresh into it) on every
+	-- character spawn, including the very first one -- not just death/respawn. SaveSystem's
+	-- DataStore read is an async network call that often resolves BEFORE that first spawn actually
+	-- happens, so adding a sack straight into Backpack at that point meant it frequently got added
+	-- to an instance that was about to be wiped a moment later -- exactly why the leaf COUNT (plain
+	-- saved data) survived but the physical Tool never did. Waiting for the Character to exist
+	-- first guarantees this runs after that spawn-time reset, not racing it.
+	if not player.Character then
+		local attempts = 0
+		while not player.Character and attempts < 100 and player.Parent do
+			task.wait(0.1)
+			attempts += 1
+		end
+	end
+
 	local backpack = player:WaitForChild("Backpack", 5)
 	if not backpack then
 		return
@@ -246,18 +270,16 @@ function SackSystem.RestoreSacks(player, leafCounts)
 	local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	local position = rootPart and rootPart.Position or Vector3.new(0, 0, 0)
 
-	local restoredCount = 0
 	for _, leafCount in ipairs(leafCounts) do
 		if leafCount > 0 then
 			local tool = newSackTool(leafCount, position, player.UserId)
 			tool.Parent = backpack
-			restoredCount += 1
 		end
 	end
 
-	if restoredCount > 0 then
-		player:SetAttribute("ActiveSackCount", (player:GetAttribute("ActiveSackCount") or 0) + restoredCount)
-	end
+	-- Recomputed from the real sacks that now exist, not added on top of whatever the attribute
+	-- happened to already read -- see ResyncActiveSackCount's comment.
+	SackSystem.ResyncActiveSackCount(player)
 end
 
 local function onWorkspaceDescendantAdded(descendant)

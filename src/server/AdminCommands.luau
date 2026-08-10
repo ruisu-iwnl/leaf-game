@@ -5,6 +5,7 @@ local TextChatService = game:GetService("TextChatService")
 
 local AdminConfig = require(ReplicatedStorage.Shared.AdminConfig)
 local MoneySystem = require(script.Parent.MoneySystem)
+local SackSystem = require(script.Parent.SackSystem)
 
 -- Lightweight dev/testing commands, e.g. ":addmoney me 100". Restricted to the game's owner
 -- (game.CreatorId) plus any extra usernames listed in AdminConfig.ExtraAdmins, PLUS anyone
@@ -112,6 +113,21 @@ commands.wipemoney = function(admin, args)
 	end
 	MoneySystem.SetCoins(target, 0)
 	print(string.format("[Admin] %s wiped %s's coins", admin.Name, target.Name))
+end
+
+-- Recalculates ActiveSackCount from the real sack Tools a player currently has (see
+-- SackSystem.ResyncActiveSackCount) -- fixes the "counter says 2/3 but nothing's in the hotbar"
+-- desync immediately, without needing a rejoin.
+commands.fixsacks = function(admin, args)
+	local target = resolveTarget(admin, args[1])
+	if not target then
+		return
+	end
+	SackSystem.ResyncActiveSackCount(target)
+	print(string.format(
+		"[Admin] %s resynced %s's ActiveSackCount to match their real sacks (now %d)",
+		admin.Name, target.Name, target:GetAttribute("ActiveSackCount") or 0
+	))
 end
 
 -- Shared by both the RemoteEvent path and the (bonus, possibly-inert) chat listeners below.
