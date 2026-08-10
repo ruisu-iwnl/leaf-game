@@ -201,6 +201,65 @@ local function newSackTool(leafCount, position, ownerUserId)
 	return tool
 end
 
+-- Public: every physical sack this player currently has -- Backpack (stowed) and equipped
+-- (Character) both -- as a flat list of each one's leaf count. Used by SaveSystem to persist them
+-- across sessions; see SackSystem.RestoreSacks for the other half.
+function SackSystem.GetPlayerSackLeafCounts(player)
+	local counts = {}
+
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack then
+		for _, child in ipairs(backpack:GetChildren()) do
+			if child:IsA("Tool") and child.Name == SACK_TOOL_NAME then
+				table.insert(counts, child:GetAttribute("LeafCount") or 0)
+			end
+		end
+	end
+
+	local character = player.Character
+	if character then
+		for _, child in ipairs(character:GetChildren()) do
+			if child:IsA("Tool") and child.Name == SACK_TOOL_NAME then
+				table.insert(counts, child:GetAttribute("LeafCount") or 0)
+			end
+		end
+	end
+
+	return counts
+end
+
+-- Public: recreates physical sacks straight into this player's Backpack from a saved leaf-count
+-- list (see GetPlayerSackLeafCounts) -- called once by SaveSystem right after a player's data
+-- loads in. Placed directly into Backpack rather than dropped in the world via the pickup prompt,
+-- since these are being handed back, not freshly spawned; exact position barely matters since it
+-- isn't visible until equipped (Roblox re-grips it to the hand at that point regardless).
+function SackSystem.RestoreSacks(player, leafCounts)
+	if not leafCounts or #leafCounts == 0 then
+		return
+	end
+
+	local backpack = player:WaitForChild("Backpack", 5)
+	if not backpack then
+		return
+	end
+
+	local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	local position = rootPart and rootPart.Position or Vector3.new(0, 0, 0)
+
+	local restoredCount = 0
+	for _, leafCount in ipairs(leafCounts) do
+		if leafCount > 0 then
+			local tool = newSackTool(leafCount, position, player.UserId)
+			tool.Parent = backpack
+			restoredCount += 1
+		end
+	end
+
+	if restoredCount > 0 then
+		player:SetAttribute("ActiveSackCount", (player:GetAttribute("ActiveSackCount") or 0) + restoredCount)
+	end
+end
+
 local function onWorkspaceDescendantAdded(descendant)
 	if descendant:IsA("Tool") and descendant.Name == SACK_TOOL_NAME then
 		activeSacks[descendant] = true

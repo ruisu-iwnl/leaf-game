@@ -1,11 +1,22 @@
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local LeavesCleanedStat = require(script.Parent.LeavesCleanedStat)
 local MoneySystem = require(script.Parent.MoneySystem)
+local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
+local SackSystem = require(script.Parent.SackSystem)
 
--- Persists Coins across sessions. Scoped to just Coins for now, matching where the build order
--- actually is (Step 6, Money) -- Step 8 (Saving) will expand this to LeavesCleaned, upgrades,
--- areas, cosmetics, and season progress once those systems exist to have something to save.
+-- Persists Coins, the per-player lifetime LeavesCleaned count, SackStorage (leaves currently held
+-- in the sack UI, not yet turned into a physical sack), and every physical sack currently in the
+-- player's Backpack/equipped (as a leaf-count list -- see SackSystem.GetPlayerSackLeafCounts/
+-- RestoreSacks) across sessions. Upgrades, areas, cosmetics, and season progress will get added
+-- here once those systems exist to have something to save -- nothing to persist for them yet.
+--
+-- ActiveSackCount itself is still NOT stored as a raw number -- it's derived by RestoreSacks
+-- incrementing it once per sack it actually rebuilds, so it can never drift from the real physical
+-- sacks a player has (which is exactly what would soft-lock them if the count were persisted on
+-- its own, unattached to real sacks).
 --
 -- Two things have to be true for this to actually work, neither of which a script can flip on
 -- its own:
@@ -23,7 +34,7 @@ local function keyFor(player)
 	return "Player_" .. player.UserId
 end
 
-local function loadCoins(player)
+local function loadPlayerData(player)
 	local ok, result = pcall(function()
 		return playerData:GetAsync(keyFor(player))
 	end)
@@ -36,22 +47,43 @@ local function loadCoins(player)
 		return
 	end
 
-	if not result or typeof(result.Coins) ~= "number" then
+	if not result then
 		return -- brand new player, nothing saved yet
 	end
 
-	-- GetAsync above already yielded on a real network call, so MoneySystem's own PlayerAdded
-	-- handler (connected before this one) has almost certainly already built leaderstats by now --
-	-- WaitForChild is just a defensive backstop against that ordering assumption.
+	-- GetAsync above already yielded on a real network call, so MoneySystem's/LeavesCleanedStat's
+	-- own PlayerAdded handlers (connected before this one) have almost certainly already built
+	-- leaderstats by now -- WaitForChild is just a defensive backstop against that ordering
+	-- assumption.
 	if player:WaitForChild("leaderstats", 5) then
-		MoneySystem.SetCoins(player, result.Coins)
+		if typeof(result.Coins) == "number" then
+			MoneySystem.SetCoins(player, result.Coins)
+		end
+		if typeof(result.LeavesCleaned) == "number" then
+			LeavesCleanedStat.Set(player, result.LeavesCleaned)
+		end
+	end
+
+	-- A plain player Attribute (same as SackSystem/SackUI already read/write it directly, no
+	-- dedicated accessor module) -- unlike leaderstats, doesn't need anything else to exist first.
+	if typeof(result.SackStorage) == "number" then
+		player:SetAttribute("SackStorage", math.clamp(math.floor(result.SackStorage), 0, SackConfig.MaxCapacity))
+	end
+
+	if typeof(result.SackLeafCounts) == "table" then
+		SackSystem.RestoreSacks(player, result.SackLeafCounts)
 	end
 end
 
-local function saveCoins(player)
-	local coins = MoneySystem.GetCoins(player)
+local function savePlayerData(player)
+	local data = {
+		Coins = MoneySystem.GetCoins(player),
+		LeavesCleaned = LeavesCleanedStat.Get(player),
+		SackStorage = player:GetAttribute("SackStorage") or 0,
+		SackLeafCounts = SackSystem.GetPlayerSackLeafCounts(player),
+	}
 	local ok, err = pcall(function()
-		playerData:SetAsync(keyFor(player), { Coins = coins })
+		playerData:SetAsync(keyFor(player), data)
 	end)
 	if not ok then
 		warn(string.format("[Save] failed to save data for %s: %s", player.Name, tostring(err)))
@@ -59,7 +91,7 @@ local function saveCoins(player)
 end
 
 local function onPlayerAdded(player)
-	loadCoins(player)
+	loadPlayerData(player)
 end
 
 function SaveSystem.Start()
@@ -68,13 +100,13 @@ function SaveSystem.Start()
 		onPlayerAdded(player)
 	end
 
-	Players.PlayerRemoving:Connect(saveCoins)
+	Players.PlayerRemoving:Connect(savePlayerData)
 
 	-- Covers real server shutdowns (Roblox recycling live servers) -- without this, a player who's
 	-- still connected when the server closes never gets their last few seconds of progress saved.
 	game:BindToClose(function()
 		for _, player in ipairs(Players:GetPlayers()) do
-			saveCoins(player)
+			savePlayerData(player)
 		end
 	end)
 end
