@@ -36,7 +36,6 @@ local consumeFlashEmitter
 local leavesCleanedCount = 0
 local zoneCycleCount = 0
 local fallingLeaves = {} -- part -> state, only leaves CURRENTLY falling (for the blower's mid-air redirect)
-local landedFalling = {}
 local restingLeaves = {} -- leaf -> { baseX, baseZ, restY, yaw, disturbing }
 local lastPlayerPositions = {} -- player -> Vector3, used to gate disturbance on actual movement
 local started = false
@@ -131,19 +130,6 @@ local function markResting(leaf, restPosition, yaw)
 	}
 end
 
--- Fades a leaf out and removes it. Called once a leaf's lifetime on the ground expires.
-local function despawnLeaf(leaf)
-	if not leaf or not leaf.Parent then
-		return
-	end
-	restingLeaves[leaf] = nil
-	local tween = TweenService:Create(leaf, TweenInfo.new(LeafConfig.DespawnFadeDuration, Enum.EasingStyle.Sine), { Transparency = 1 })
-	tween.Completed:Connect(function()
-		leaf:Destroy()
-	end)
-	tween:Play()
-end
-
 -- Fires a quick outward particle burst at a delivered leaf's position. Reuses one shared
 -- Part+ParticleEmitter (just repositioned each call) instead of creating/destroying an Instance
 -- per leaf -- with potentially thousands of leaves delivered per minute, that's the difference
@@ -161,35 +147,16 @@ local function playConsumeVFX(position)
 	consumeFlashEmitter:Emit(1)
 end
 
--- Drives the billboard progress bar: a repeating quota (0 -> 100% every CleanupZoneGoal leaves),
--- not a lifetime total. Accepts a count > 1 (the sack system can deliver up to SackConfig
--- .MaxCapacity leaves in one go) -- any overshoot past the goal carries over as the start of the
--- next lap instead of being discarded, so a big delivery never silently "loses" leaves worth of
--- progress. Guarded with a generation counter (not the old "still 0" check, since the remainder
--- carried over is no longer always exactly 0) so a big batch completing several laps within the
--- same reset delay can't have a stale reset clobber a newer lap's already-in-progress fill.
-local zoneResetGeneration = 0
-
+-- Drives the billboard progress bar: a ONE-TIME goal (0 -> 100% across CleanupZoneGoal leaves,
+-- matching the map's whole fixed leaf budget), not a repeating quota -- climbs to 100% and stays
+-- there once every leaf on the map has been delivered, so it doubles as "is the map clean yet."
+-- Accepts a count > 1 (the sack system can deliver up to SackConfig.MaxCapacity leaves in one go),
+-- clamped so a big delivery landing right at/past the goal can't overshoot past 100%.
 local function registerZoneProgress(count)
 	local goal = LeafConfig.CleanupZoneGoal
-	zoneCycleCount += count
-
-	if zoneCycleCount >= goal then
-		zoneCycleCount = zoneCycleCount % goal
-		zoneResetGeneration += 1
-		local myGeneration = zoneResetGeneration
-		Workspace:SetAttribute("CleanupZoneCount", goal)
-		Workspace:SetAttribute("CleanupZoneProgress", 1)
-		task.delay(LeafConfig.CleanupZoneResetDelay, function()
-			if zoneResetGeneration == myGeneration then
-				Workspace:SetAttribute("CleanupZoneCount", zoneCycleCount)
-				Workspace:SetAttribute("CleanupZoneProgress", zoneCycleCount / goal)
-			end
-		end)
-	else
-		Workspace:SetAttribute("CleanupZoneCount", zoneCycleCount)
-		Workspace:SetAttribute("CleanupZoneProgress", zoneCycleCount / goal)
-	end
+	zoneCycleCount = math.min(zoneCycleCount + count, goal)
+	Workspace:SetAttribute("CleanupZoneCount", zoneCycleCount)
+	Workspace:SetAttribute("CleanupZoneProgress", zoneCycleCount / goal)
 end
 
 -- A leaf "arriving" in the cleanup zone: untracked, VFX'd, and destroyed in one shot so it can
@@ -244,26 +211,6 @@ function LeafSpawner.CollectLeaf(leaf)
 	tween:Play()
 
 	return true
-end
-
--- Scheduled once per leaf via task.delay (cheap engine-side timer, no per-frame polling) rather than
--- tracking ages in a list, so despawning many leaves stays optimized as the leaf count grows.
-local function scheduleDespawn(leaf, lifetimeMin, lifetimeMax)
-	local lifetime = lifetimeMin + math.random() * (lifetimeMax - lifetimeMin)
-	task.delay(lifetime, despawnLeaf, leaf)
-end
-
--- Same as scheduleDespawn, but also removes the leaf from the landedFalling FIFO once its
--- natural lifetime expires, so that list only ever tracks leaves that are still alive.
-local function scheduleFallingDespawn(leaf)
-	local lifetime = LeafConfig.FallingLifetimeMin + math.random() * (LeafConfig.FallingLifetimeMax - LeafConfig.FallingLifetimeMin)
-	task.delay(lifetime, function()
-		local index = table.find(landedFalling, leaf)
-		if index then
-			table.remove(landedFalling, index)
-		end
-		despawnLeaf(leaf)
-	end)
 end
 
 -- If a glide's straight-line path would pass through solid geometry (a wall, fence, tree trunk),
@@ -437,13 +384,6 @@ local function beginFall(leaf, restPosition)
 		-- leaf's NEXT glide keeps computing from a fixed baseline instead of drifting upward over
 		-- repeated moves. See randomStackHeight's comment.
 		markResting(leaf, Vector3.new(finalCFrame.Position.X, groundY, finalCFrame.Position.Z), landedYaw)
-
-		table.insert(landedFalling, leaf)
-		if #landedFalling > LeafConfig.FallingMaxLanded then
-			local oldest = table.remove(landedFalling, 1)
-			despawnLeaf(oldest)
-		end
-		scheduleFallingDespawn(leaf)
 	end)
 end
 
@@ -646,29 +586,22 @@ local function pullRestingLeaf(leaf, rest, origin, rakeConfig, player)
 	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees, player)
 end
 
--- Hysteresis refill: fills up to FallingTargetCount then pauses, and only starts topping up
--- again once the total on-map count drops to FallingResumeBelow (via natural despawns, or later,
--- players clearing leaves at the cleanup zone). Avoids both "stuck at cap forever" and "never stops".
+-- ONE-TIME lifetime budget, not hysteresis: spawns up to FallingTargetCount total (tracked here,
+-- not re-derived from the current on-map count) and then the loop simply ends -- no refilling once
+-- leaves land, get collected, or despawn. FallingMaxConcurrent still throttles how many are
+-- actively mid-fall at once, purely so the sky doesn't dump the whole budget in one visual burst.
 local function runFallingSpawnLoop()
-	local refilling = true
-	while true do
-		local currentTotal = #fallingFolder:GetChildren()
-
-		if refilling and currentTotal >= LeafConfig.FallingTargetCount then
-			refilling = false
-		elseif not refilling and currentTotal <= LeafConfig.FallingResumeBelow then
-			refilling = true
-		end
-
+	local totalSpawned = 0
+	while totalSpawned < LeafConfig.FallingTargetCount do
 		local fallingCount = 0
 		for _ in pairs(fallingLeaves) do
 			fallingCount += 1
 		end
 
-		if refilling and fallingCount < LeafConfig.FallingMaxConcurrent then
+		if fallingCount < LeafConfig.FallingMaxConcurrent then
 			local toSpawn = math.min(
 				LeafConfig.FallingSpawnBatchSize,
-				LeafConfig.FallingTargetCount - currentTotal,
+				LeafConfig.FallingTargetCount - totalSpawned,
 				LeafConfig.FallingMaxConcurrent - fallingCount
 			)
 			for _ = 1, math.max(toSpawn, 0) do
@@ -676,6 +609,7 @@ local function runFallingSpawnLoop()
 				local leaf = createLeaf(restPosition)
 				leaf.Parent = fallingFolder
 				beginFall(leaf, restPosition)
+				totalSpawned += 1
 			end
 		end
 
@@ -704,29 +638,21 @@ local function spawnGroundCluster()
 		leaf.CFrame = CFrame.new(restPosition) * CFrame.Angles(0, yaw, 0)
 		leaf.Parent = groundFolder
 		markResting(leaf, restPosition, yaw)
-		scheduleDespawn(leaf, LeafConfig.GroundLifetimeMin, LeafConfig.GroundLifetimeMax)
 	end
 end
 
--- Same hysteresis idea as runFallingSpawnLoop: fills up to GroundMaxLeaves then pauses, and only
--- resumes once the on-map total has actually dropped to GroundResumeBelow.
+-- ONE-TIME lifetime budget, not hysteresis: spawns up to GroundMaxLeaves total (tracked here, not
+-- re-derived from the current on-map count) and then the loop simply ends -- no refilling. Leaves
+-- never despawn on their own either (no lifetime timer), so the map's leaf population only ever
+-- goes down via a player actually delivering/collecting them.
 local function runGroundSpawnLoop()
-	local refilling = true
-	while true do
-		local currentCount = #groundFolder:GetChildren()
-
-		if refilling and currentCount >= LeafConfig.GroundMaxLeaves then
-			refilling = false
-		elseif not refilling and currentCount <= LeafConfig.GroundResumeBelow then
-			refilling = true
-		end
-
-		if refilling then
-			local remaining = LeafConfig.GroundMaxLeaves - currentCount
-			local clustersToSpawn = math.min(LeafConfig.GroundSpawnBatchSize, math.ceil(remaining / LeafConfig.GroundClusterSize))
-			for _ = 1, math.max(clustersToSpawn, 0) do
-				spawnGroundCluster()
-			end
+	local totalSpawned = 0
+	while totalSpawned < LeafConfig.GroundMaxLeaves do
+		local remaining = LeafConfig.GroundMaxLeaves - totalSpawned
+		local clustersToSpawn = math.min(LeafConfig.GroundSpawnBatchSize, math.ceil(remaining / LeafConfig.GroundClusterSize))
+		for _ = 1, math.max(clustersToSpawn, 0) do
+			spawnGroundCluster()
+			totalSpawned += LeafConfig.GroundClusterSize
 		end
 		task.wait(LeafConfig.GroundSpawnInterval)
 	end

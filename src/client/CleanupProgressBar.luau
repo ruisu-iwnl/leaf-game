@@ -10,20 +10,38 @@ local CleanupProgressBar = {}
 local PULSE_TWEEN_INFO = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local PROGRESS_SMOOTHING_PER_SECOND = 6
 
+local DEFAULT_HINT_TEXT = "Keep the street clean!"
+local COMPLETE_HINT_TEXT = "MAP COMPLETED! Great job!"
+local COMPLETE_HINT_COLOR = Color3.fromRGB(150, 235, 170)
+
 function CleanupProgressBar.Start()
 	local cleanupZone = Workspace:WaitForChild("CleanupZone")
 	local billboard = cleanupZone:WaitForChild("ProgressBillboard")
-	local track = billboard:WaitForChild("Container"):WaitForChild("Track")
+	local container = billboard:WaitForChild("Container")
+	local track = container:WaitForChild("Track")
 	local fill = track:WaitForChild("Fill")
 	local percentLabel = track:WaitForChild("PercentLabel")
+	local hint = container:WaitForChild("Hint")
 
 	local baseFillColor = fill.BackgroundColor3
 	local pulseColor = Color3.fromRGB(255, 255, 255)
+	local baseHintColor = hint.TextColor3
+
+	local function updateHint(value)
+		if value >= 0.999 then
+			hint.Text = COMPLETE_HINT_TEXT
+			hint.TextColor3 = COMPLETE_HINT_COLOR
+		else
+			hint.Text = DEFAULT_HINT_TEXT
+			hint.TextColor3 = baseHintColor
+		end
+	end
 
 	local displayed = Workspace:GetAttribute("CleanupZoneProgress") or 0
 	local target = displayed
 	fill.Size = UDim2.new(displayed, 0, 1, 0)
 	percentLabel.Text = string.format("%d%%", math.floor(displayed * 100 + 0.5))
+	updateHint(displayed)
 
 	local function pulse()
 		local up = TweenService:Create(fill, PULSE_TWEEN_INFO, { BackgroundColor3 = pulseColor })
@@ -41,6 +59,7 @@ function CleanupProgressBar.Start()
 			displayed = newValue
 		end
 		target = newValue
+		updateHint(newValue)
 		if newValue >= 0.999 then
 			pulse()
 		end

@@ -89,6 +89,9 @@ function CleanupZoneUI.Start()
 	-- clean/minimal without blowing out. Scale-sized relative to the (fixed-pixel) container rather
 	-- than its own fixed Offset value, so it and the percentage text inside it stay proportionally
 	-- contained and never risk clipping at the container's edge.
+	-- ClipsDescendants so PercentLabel (a fixed TextSize, not TextScaled -- see that label's own
+	-- comment) can never visibly poke out past the pill's rounded edge if its box ends up smaller
+	-- than the literal text height.
 	local track = Instance.new("Frame")
 	track.Name = "Track"
 	track.LayoutOrder = 1
@@ -96,6 +99,7 @@ function CleanupZoneUI.Start()
 	track.BackgroundColor3 = Color3.fromRGB(214, 210, 200)
 	track.BackgroundTransparency = 0.05
 	track.BorderSizePixel = 0
+	track.ClipsDescendants = true
 	track.Parent = container
 
 	local trackCorner = Instance.new("UICorner")
@@ -136,14 +140,15 @@ function CleanupZoneUI.Start()
 	percentLabel.Font = Enum.Font.FredokaOne
 	percentLabel.Text = "0%"
 	percentLabel.TextScaled = false
-	percentLabel.TextSize = 22
+	percentLabel.TextSize = 16
 	percentLabel.TextWrapped = false
 	percentLabel.TextXAlignment = Enum.TextXAlignment.Right
 	percentLabel.TextColor3 = Color3.fromRGB(35, 30, 25)
 	percentLabel.ZIndex = 2
 	percentLabel.Parent = track
 
-	-- A little context for why the bar keeps looping, rather than a one-time goal.
+	-- Default copy while the map's still being cleaned -- swapped client-side (CleanupProgressBar
+	-- .luau) to a "MAP COMPLETED" congrats once CleanupZoneProgress hits 100%.
 	local hint = Instance.new("TextLabel")
 	hint.Name = "Hint"
 	hint.LayoutOrder = 2

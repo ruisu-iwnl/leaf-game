@@ -1,18 +1,16 @@
 return {
 	LeafSize = Vector3.new(1, 0.08, 1),
-	DespawnFadeDuration = 0.5,
 
-	-- Leaves that drift down from the sky, refilled with hysteresis: once the total on-map count
-	-- (falling + landed) reaches FallingTargetCount, spawning pauses; it only resumes once natural
-	-- despawns (or, later, players cleaning them up) bring the count back down to FallingResumeBelow.
+	-- Leaves that drift down from the sky. ONE-TIME lifetime budget, not hysteresis: spawns up to
+	-- FallingTargetCount total and then stops for good, same as GroundMaxLeaves below -- no
+	-- refilling once leaves land or get collected, and no despawning on a timer either. Once
+	-- landed, a falling leaf sticks around exactly like a ground leaf until a player actually
+	-- delivers/collects it. FallingMaxConcurrent still throttles how many are actively mid-fall at
+	-- once, purely so the sky doesn't dump the whole budget in one visual burst.
 	FallingTargetCount = 700,
-	FallingResumeBelow = 250,
 	FallingMaxConcurrent = 300,
-	FallingMaxLanded = 1200,
 	FallingSpawnInterval = 0.2,
 	FallingSpawnBatchSize = 25,
-	FallingLifetimeMin = 300,
-	FallingLifetimeMax = 600,
 
 	-- Fall speed is studs/second, not a fixed duration, so a higher spawn height
 	-- just takes proportionally longer instead of falling unnaturally fast.
@@ -45,20 +43,19 @@ return {
 	-- top-of-file note on why real per-leaf collision at this scale isn't worth the performance
 	-- risk -- thousands of unanchored parts settling into each other is one of the more reliable
 	-- ways to tank a Roblox server). Long-lived compared to the falling ones.
-	-- Hysteresis pair (same pattern as Falling*TargetCount/ResumeBelow below): fills up to
-	-- GroundMaxLeaves then pauses, only resuming once natural depletion (collection/blowing into
-	-- the zone) drops the on-map total to GroundResumeBelow -- so the yard never gets thinner than
-	-- that floor for long, but also isn't constantly re-topping-up to the hard cap.
-	GroundMaxLeaves = 11000,
-	GroundResumeBelow = 6000,
+	-- This is a ONE-TIME lifetime total, not a hysteresis refill target: runGroundSpawnLoop spawns
+	-- up to GroundMaxLeaves once, then stops for good. Leaves never despawn on a timer either --
+	-- once placed, one sticks around until a player actually delivers/collects it, so the map's
+	-- leaf population only ever goes down through real cleanup, never on its own.
+	-- 10,300 here + FallingTargetCount's 700 = 11,000, the whole map's leaf budget, so reaching
+	-- CleanupZoneGoal (below) really means "map is clean."
+	GroundMaxLeaves = 10300,
 	GroundClusterSize = 8, -- leaves per pile
 	GroundClusterRadius = 1.3, -- how tightly a pile's leaves scatter around its center, studs
 	GroundStackHeightMin = 0.02, -- per-leaf Y increment within a pile, studs
 	GroundStackHeightMax = 0.05,
 	GroundSpawnInterval = 0.05,
 	GroundSpawnBatchSize = 10, -- PILES (not individual leaves) spawned per loop tick
-	GroundLifetimeMin = 300,
-	GroundLifetimeMax = 600,
 
 	-- Resting leaves get shoved a short distance when a player WALKS near, landing at a genuinely
 	-- new spot each time (not springing back) so repeated gusts drift them around over time.
@@ -125,8 +122,8 @@ return {
 		{ Center = Vector3.new(-32, 0, 20), Size = Vector3.new(18, 0, 16) },
 	},
 
-	-- Cleanup zone progress bar: cycles 0 -> 100% every this many delivered leaves, then resets to
-	-- 0 and starts filling again (a repeating quota, not a one-time lifetime total).
-	CleanupZoneGoal = 250,
-	CleanupZoneResetDelay = 0.4, -- seconds the bar holds at 100% before visibly snapping back to 0
+	-- Cleanup zone progress bar: a ONE-TIME goal matching the map's whole leaf budget
+	-- (GroundMaxLeaves above), not a repeating quota -- climbs to 100% once and stays there, so it
+	-- doubles as "is the map actually clean yet" rather than a per-delivery streak counter.
+	CleanupZoneGoal = 11000,
 }

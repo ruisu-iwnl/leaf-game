@@ -54,6 +54,12 @@ local function buildUI()
 
 	-- Purely a positioning/animation wrapper -- no background of its own (see `fill` below), so
 	-- there's nothing here to fade in/out, only slide (Position) and pop (UIScale) to animate.
+	-- Active = false is set on EVERY descendant Frame/TextLabel below too, not just this one --
+	-- Roblox has a documented engine inconsistency where touch input's "sink through an inactive
+	-- GuiObject" behavior doesn't reliably match mouse input's, so relying on the default (false)
+	-- inheriting down from just this top frame isn't safe on mobile. This card sits at a very high
+	-- DisplayOrder and can span most of a phone's screen width while visible, so any gap here can
+	-- read as "the whole game stopped responding to taps" the moment a badge pops up.
 	local card = Instance.new("Frame")
 	card.Name = "Card"
 	card.Active = false -- purely a notification, never blocks clicks to anything under/behind it
@@ -73,6 +79,7 @@ local function buildUI()
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
+	fill.Active = false
 	fill.Size = UDim2.new(1, 0, 1, 0)
 	fill.BackgroundColor3 = CARD_COLOR
 	fill.BorderSizePixel = 0
@@ -92,6 +99,7 @@ local function buildUI()
 	-- See the file-level comment -- masks fill's rounded top corners (and their stroke) flat.
 	local topMask = Instance.new("Frame")
 	topMask.Name = "TopMask"
+	topMask.Active = false
 	topMask.Size = UDim2.new(1, 0, 0, TOP_MASK_HEIGHT)
 	topMask.BackgroundColor3 = CARD_COLOR
 	topMask.BorderSizePixel = 0
@@ -101,6 +109,7 @@ local function buildUI()
 	-- Category/tier-colored cap along the (now square) top edge -- set fresh each Show().
 	local accentBar = Instance.new("Frame")
 	accentBar.Name = "AccentBar"
+	accentBar.Active = false
 	accentBar.BorderSizePixel = 0
 	accentBar.Size = UDim2.new(1, 0, 0, 4)
 	accentBar.ZIndex = 32
@@ -108,6 +117,7 @@ local function buildUI()
 
 	local medalHolder = Instance.new("Frame")
 	medalHolder.Name = "MedalHolder"
+	medalHolder.Active = false
 	medalHolder.AnchorPoint = Vector2.new(0, 0.5)
 	medalHolder.Position = UDim2.new(0, 16, 0.5, 6)
 	medalHolder.Size = UDim2.new(0, 54, 0, 54)
@@ -117,6 +127,7 @@ local function buildUI()
 
 	local medal = Instance.new("Frame")
 	medal.Name = "Medal"
+	medal.Active = false
 	medal.Size = UDim2.new(1, 0, 1, 0)
 	medal.BorderSizePixel = 0
 	medal.ZIndex = 32
@@ -140,6 +151,7 @@ local function buildUI()
 	-- on top of TextXAlignment/TextYAlignment = Center handling the box itself.
 	local medalGlyph = Instance.new("TextLabel")
 	medalGlyph.Name = "Glyph"
+	medalGlyph.Active = false
 	medalGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
 	medalGlyph.Position = UDim2.new(0.54, 0, 0.56, 0)
 	medalGlyph.Size = UDim2.new(0.76, 0, 0.76, 0)
@@ -154,6 +166,7 @@ local function buildUI()
 
 	local textArea = Instance.new("Frame")
 	textArea.Name = "TextArea"
+	textArea.Active = false
 	textArea.Position = UDim2.new(0, 84, 0, 10)
 	textArea.Size = UDim2.new(1, -84 - 16, 0, CARD_HEIGHT - 20 + 6)
 	textArea.BackgroundTransparency = 1
@@ -162,6 +175,7 @@ local function buildUI()
 
 	local eyebrow = Instance.new("TextLabel")
 	eyebrow.Name = "Eyebrow"
+	eyebrow.Active = false
 	eyebrow.Size = UDim2.new(1, 0, 0, 16)
 	eyebrow.BackgroundTransparency = 1
 	eyebrow.Font = Enum.Font.FredokaOne
@@ -173,6 +187,7 @@ local function buildUI()
 
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Name = "Title"
+	titleLabel.Active = false
 	titleLabel.Position = UDim2.new(0, 0, 0, 16)
 	titleLabel.Size = UDim2.new(1, 0, 0, 22)
 	titleLabel.BackgroundTransparency = 1
@@ -185,6 +200,7 @@ local function buildUI()
 
 	local descriptionLabel = Instance.new("TextLabel")
 	descriptionLabel.Name = "Description"
+	descriptionLabel.Active = false
 	descriptionLabel.Position = UDim2.new(0, 0, 0, 40)
 	descriptionLabel.Size = UDim2.new(1, 0, 0, 18)
 	descriptionLabel.BackgroundTransparency = 1
@@ -200,6 +216,7 @@ local function buildUI()
 	-- per Show(). Card.ClipsDescendants keeps it from spilling past the card's own bounds.
 	local shine = Instance.new("Frame")
 	shine.Name = "Shine"
+	shine.Active = false
 	shine.AnchorPoint = Vector2.new(0.5, 0.5)
 	shine.Position = UDim2.new(0, -60, 0.5, 0)
 	shine.Rotation = 20
