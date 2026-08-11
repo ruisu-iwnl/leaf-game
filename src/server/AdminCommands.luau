@@ -10,6 +10,7 @@ local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
 local MoneySystem = require(script.Parent.MoneySystem)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
+local RoundSystem = require(script.Parent.RoundSystem)
 local SackSystem = require(script.Parent.SackSystem)
 local UpgradeConfig = require(ReplicatedStorage.Shared.UpgradeConfig)
 
@@ -283,6 +284,18 @@ commands.testbadge = function(admin, args)
 	end
 	BadgeSystem.FireNotification(target, id)
 	print(string.format("[Admin] %s test-fired the %s badge popup for %s", admin.Name, id, target.Name))
+end
+
+-- Skips straight to Results without waiting out the rest of RoundDurationSeconds, as if the timer
+-- had just expired -- for testing the Active->Results->Intermission tail of the round loop without
+-- sitting through a full 4-minute round. Counts as a Timer end (RoundEndReason), not a Goal one --
+-- see RoundSystem.ForceEndRound.
+commands.finishround = function(admin)
+	if RoundSystem.ForceEndRound() then
+		print(string.format("[Admin] %s force-ended the round early (counts as Time's Up)", admin.Name))
+	else
+		warn("[Admin] :finishround only works during an Active round")
+	end
 end
 
 -- Shared by both the RemoteEvent path and the (bonus, possibly-inert) chat listeners below.

@@ -7,6 +7,9 @@ return {
 	-- landed, a falling leaf sticks around exactly like a ground leaf until a player actually
 	-- delivers/collects it. FallingMaxConcurrent still throttles how many are actively mid-fall at
 	-- once, purely so the sky doesn't dump the whole budget in one visual burst.
+	-- NOTE: FallingTargetCount/GroundMaxLeaves below are the LOBBY's leaf budget only (always-on,
+	-- not round-scoped) -- each map's own round budget is its own FallingLeafCount/GroundLeafCount
+	-- in MapConfig.luau instead, so different maps can spawn different amounts.
 	FallingTargetCount = 700,
 	FallingMaxConcurrent = 300,
 	FallingSpawnInterval = 0.2,
@@ -43,12 +46,11 @@ return {
 	-- top-of-file note on why real per-leaf collision at this scale isn't worth the performance
 	-- risk -- thousands of unanchored parts settling into each other is one of the more reliable
 	-- ways to tank a Roblox server). Long-lived compared to the falling ones.
-	-- This is a ONE-TIME lifetime total, not a hysteresis refill target: runGroundSpawnLoop spawns
-	-- up to GroundMaxLeaves once, then stops for good. Leaves never despawn on a timer either --
-	-- once placed, one sticks around until a player actually delivers/collects it, so the map's
-	-- leaf population only ever goes down through real cleanup, never on its own.
-	-- 10,300 here + FallingTargetCount's 700 = 11,000, the whole map's leaf budget, so reaching
-	-- CleanupZoneGoal (below) really means "map is clean."
+	-- This is a ONE-TIME lifetime total, not a hysteresis refill target: runLobbyGroundSpawnLoop
+	-- spawns up to GroundMaxLeaves once, then stops for good. Leaves never despawn on a timer
+	-- either -- once placed, one sticks around until a player actually delivers/collects it.
+	-- 10,300 here + FallingTargetCount's 700 = 11,000, the Lobby's whole leaf budget (atmosphere
+	-- only -- the Lobby has no cleanup goal/reward, see StartingLobby.LobbyCleanupZone).
 	GroundMaxLeaves = 10300,
 	GroundClusterSize = 8, -- leaves per pile
 	GroundClusterRadius = 1.3, -- how tightly a pile's leaves scatter around its center, studs
@@ -121,9 +123,4 @@ return {
 	AvoidRegions = {
 		{ Center = Vector3.new(-32, 0, 20), Size = Vector3.new(18, 0, 16) },
 	},
-
-	-- Cleanup zone progress bar: a ONE-TIME goal matching the map's whole leaf budget
-	-- (GroundMaxLeaves above), not a repeating quota -- climbs to 100% once and stays there, so it
-	-- doubles as "is the map actually clean yet" rather than a per-delivery streak counter.
-	CleanupZoneGoal = 11000,
 }

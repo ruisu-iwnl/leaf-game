@@ -68,86 +68,97 @@ local function readGlideParams(leaf)
 end
 
 function LeafRenderer.Start()
-	local active = {} -- leaf -> true, only currently-animating leaves
-	local watched = setmetatable({}, { __mode = "k" }) -- leaf -> true, already has a listener
-
-	local function activate(leaf)
-		active[leaf] = true
-	end
-
-	local function watchLeaf(leaf)
-		if watched[leaf] then
+	-- Leaves folder is created server-side by LeafSpawner, itself now deferred/timed (see its own
+	-- comment) -- an untimed wait here could, in the worst case (Map1 missing, etc.), block every
+	-- module after this one in init.client.luau. Deferred + timed here too, same pattern as the
+	-- other fixes this session.
+	task.spawn(function()
+		local leavesFolder = Workspace:WaitForChild("Leaves", 15)
+		if not leavesFolder then
+			warn("[LeafRenderer] Workspace.Leaves not found after 15s -- leaf motion rendering disabled this session.")
 			return
 		end
-		watched[leaf] = true
 
-		-- MotionStart is always the LAST attribute LeafSpawner sets for a given motion, so by the
-		-- time this fires every other attribute for that motion is already in place.
-		leaf:GetAttributeChangedSignal("MotionStart"):Connect(function()
-			activate(leaf)
+		local active = {} -- leaf -> true, only currently-animating leaves
+		local watched = setmetatable({}, { __mode = "k" }) -- leaf -> true, already has a listener
+
+		local function activate(leaf)
+			active[leaf] = true
+		end
+
+		local function watchLeaf(leaf)
+			if watched[leaf] then
+				return
+			end
+			watched[leaf] = true
+
+			-- MotionStart is always the LAST attribute LeafSpawner sets for a given motion, so by the
+			-- time this fires every other attribute for that motion is already in place.
+			leaf:GetAttributeChangedSignal("MotionStart"):Connect(function()
+				activate(leaf)
+			end)
+
+			-- Covers this script starting (or a player joining) after a leaf's motion already began --
+			-- MotionStart being set at all means it might still be mid-flight.
+			if leaf:GetAttribute("MotionStart") then
+				activate(leaf)
+			end
+		end
+
+		local function onDescendantAdded(descendant)
+			if descendant:IsA("BasePart") and descendant.Name == "Leaf" then
+				watchLeaf(descendant)
+			end
+		end
+
+		local function onDescendantRemoving(descendant)
+			active[descendant] = nil
+		end
+
+		leavesFolder.DescendantAdded:Connect(onDescendantAdded)
+		leavesFolder.DescendantRemoving:Connect(onDescendantRemoving)
+		for _, descendant in ipairs(leavesFolder:GetDescendants()) do
+			onDescendantAdded(descendant)
+		end
+
+		RunService.Heartbeat:Connect(function()
+			local now = Workspace:GetServerTimeNow()
+			for leaf in pairs(active) do
+				if not leaf.Parent then
+					active[leaf] = nil
+					continue
+				end
+
+				local kind = leaf:GetAttribute("MotionKind")
+				local startTime = leaf:GetAttribute("MotionStart")
+				local duration = leaf:GetAttribute("MotionDuration")
+				if not kind or not startTime or not duration or duration <= 0 then
+					active[leaf] = nil
+					continue
+				end
+
+				local elapsed = now - startTime
+				local finished = elapsed >= duration
+				if finished then
+					elapsed = duration
+				end
+
+				local cframe
+				if kind == "Fall" then
+					cframe = LeafMotion.ComputeFalling(readFallParams(leaf), elapsed)
+				elseif kind == "Glide" then
+					cframe = LeafMotion.ComputeGlide(readGlideParams(leaf), elapsed)
+				end
+
+				if cframe then
+					leaf.CFrame = cframe
+				end
+
+				if finished then
+					active[leaf] = nil
+				end
+			end
 		end)
-
-		-- Covers this script starting (or a player joining) after a leaf's motion already began --
-		-- MotionStart being set at all means it might still be mid-flight.
-		if leaf:GetAttribute("MotionStart") then
-			activate(leaf)
-		end
-	end
-
-	local function onDescendantAdded(descendant)
-		if descendant:IsA("BasePart") and descendant.Name == "Leaf" then
-			watchLeaf(descendant)
-		end
-	end
-
-	local function onDescendantRemoving(descendant)
-		active[descendant] = nil
-	end
-
-	local leavesFolder = Workspace:WaitForChild("Leaves")
-	leavesFolder.DescendantAdded:Connect(onDescendantAdded)
-	leavesFolder.DescendantRemoving:Connect(onDescendantRemoving)
-	for _, descendant in ipairs(leavesFolder:GetDescendants()) do
-		onDescendantAdded(descendant)
-	end
-
-	RunService.Heartbeat:Connect(function()
-		local now = Workspace:GetServerTimeNow()
-		for leaf in pairs(active) do
-			if not leaf.Parent then
-				active[leaf] = nil
-				continue
-			end
-
-			local kind = leaf:GetAttribute("MotionKind")
-			local startTime = leaf:GetAttribute("MotionStart")
-			local duration = leaf:GetAttribute("MotionDuration")
-			if not kind or not startTime or not duration or duration <= 0 then
-				active[leaf] = nil
-				continue
-			end
-
-			local elapsed = now - startTime
-			local finished = elapsed >= duration
-			if finished then
-				elapsed = duration
-			end
-
-			local cframe
-			if kind == "Fall" then
-				cframe = LeafMotion.ComputeFalling(readFallParams(leaf), elapsed)
-			elseif kind == "Glide" then
-				cframe = LeafMotion.ComputeGlide(readGlideParams(leaf), elapsed)
-			end
-
-			if cframe then
-				leaf.CFrame = cframe
-			end
-
-			if finished then
-				active[leaf] = nil
-			end
-		end
 	end)
 end
 

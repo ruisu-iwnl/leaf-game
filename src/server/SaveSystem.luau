@@ -33,13 +33,25 @@ local SackSystem = require(script.Parent.SackSystem)
 --      earlier for AdminCommands -- this place has never been published.)
 local SaveSystem = {}
 
-local playerData = DataStoreService:GetDataStore("LeafBlowerPlayerData_v1")
+-- GetDataStore itself (not just GetAsync/SetAsync below) can throw in a local/unpublished test
+-- session -- pcall'd so that case disables saving for this session (with a warning) instead of
+-- throwing at module load time, which would crash this require() in init.server.luau and take
+-- every other system down with it before any of them ever start.
+local playerDataOk, playerData = pcall(DataStoreService.GetDataStore, DataStoreService, "LeafBlowerPlayerData_v1")
+if not playerDataOk then
+	warn("[Save] DataStore unavailable this session (unpublished place / API access off) -- saving disabled: " .. tostring(playerData))
+	playerData = nil
+end
 
 local function keyFor(player)
 	return "Player_" .. player.UserId
 end
 
 local function loadPlayerData(player)
+	if not playerData then
+		return
+	end
+
 	local ok, result = pcall(function()
 		return playerData:GetAsync(keyFor(player))
 	end)
@@ -122,6 +134,10 @@ local function loadPlayerData(player)
 end
 
 local function savePlayerData(player)
+	if not playerData then
+		return
+	end
+
 	local data = {
 		Coins = MoneySystem.GetCoins(player),
 		LeavesCleaned = LeavesCleanedStat.Get(player),
@@ -146,8 +162,16 @@ end
 
 function SaveSystem.Start()
 	Players.PlayerAdded:Connect(onPlayerAdded)
+	-- task.spawn, not a direct call: loadPlayerData does a real blocking DataStore GetAsync (often
+	-- several real seconds in Studio). init.server.luau calls every system's Start() sequentially on
+	-- one thread, so a direct call here would stall every system listed after this one (DayNightCycle,
+	-- BlowerTool, GamePassPerks, PurchaseSystem, RakeTool, StoreSystem, AdminCommands) until this
+	-- player's data finished loading -- including AdminCommands, which is what creates the
+	-- AdminCommand remote. This only affects players already connected when this runs (e.g. Studio
+	-- Play Solo's own test player); Players.PlayerAdded above already fires async for anyone joining
+	-- after, same as any other event connection.
 	for _, player in ipairs(Players:GetPlayers()) do
-		onPlayerAdded(player)
+		task.spawn(onPlayerAdded, player)
 	end
 
 	Players.PlayerRemoving:Connect(savePlayerData)

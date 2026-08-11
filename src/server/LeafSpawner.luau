@@ -25,16 +25,37 @@ local WindConfig = require(ReplicatedStorage.Shared.WindConfig)
 -- polling every leaf every frame, which is also just less server work overall.
 local LeafSpawner = {}
 
+-- Yard leaf spawning is now round-triggered (see StartYardRound/StopYardRound near the bottom),
+-- not an always-on-at-boot toggle -- RoundSystem calls these as Map1 gets revealed/hidden.
+-- Lobby leaves are separate and always-on, unaffected by round state.
+local yardRoundActive = false
+
+-- Forward-declared: defined near the bottom (after Start()), but Start() itself calls it from
+-- inside a task.spawn closure that only actually runs later, once the whole module has loaded --
+-- Lua's lexical scoping still needs the `local` in scope at the point Start() is written, though.
+local startLeafSpawning
+
 local fallingFolder
 local groundFolder
 local spawnArea
 local groundTop
 local cleanupZone
+local lobbyGround
+local lobbyGroundTop
+local lobbyCleanupZone
 local consumeVFXPart
 local consumeEmitter
 local consumeFlashEmitter
 local leavesCleanedCount = 0
 local zoneCycleCount = 0
+-- Set fresh each round by StartYardRound(map1, mapEntry), from that map's own MapConfig entry --
+-- how many leaves this specific map spawns/requires, replacing what used to be one hardcoded pair
+-- of global LeafConfig constants shared by every map. Lobby spawning is untouched by this -- it
+-- still always uses LeafConfig.FallingTargetCount/GroundMaxLeaves directly, since the Lobby isn't
+-- one of the maps in the pool.
+local yardFallingTarget = 0
+local yardGroundTarget = 0
+local yardGoal = 0
 local fallingLeaves = {} -- part -> state, only leaves CURRENTLY falling (for the blower's mid-air redirect)
 local restingLeaves = {} -- leaf -> { baseX, baseZ, restY, yaw, disturbing }
 local lastPlayerPositions = {} -- player -> Vector3, used to gate disturbance on actual movement
@@ -59,12 +80,27 @@ function LeafSpawner.OnLeafDelivered(callback)
 	table.insert(deliveryListeners, callback)
 end
 
-local function isInAvoidRegion(x, z)
+-- `LeafConfig.AvoidRegions`' Center values were authored back when the yard's LeafSpawnArea sat at
+-- world (0, 0.15, 0) -- effectively already an offset FROM spawnArea rather than a true absolute
+-- coordinate, just written as one. Reading them relative to spawnArea's own (live) Position, instead
+-- of as literal world coordinates, keeps today's behavior identical while making it survive
+-- RoundSystem translating the whole map away from the Lobby each round (see
+-- RoundConfig.MapAwayOffset) -- the region moves with the map instead of staying pinned to
+-- old-world-origin coordinates nothing occupies anymore.
+-- Lobby leaves (zone ~= "Yard") never intersect these regions -- they're yard-specific obstacles
+-- (the house/fence footprint), not anything in the Lobby's own layout.
+local function isInAvoidRegion(x, z, zone)
+	if zone ~= "Yard" or not spawnArea then
+		return false
+	end
+	local originX, originZ = spawnArea.Position.X, spawnArea.Position.Z
 	for _, region in pairs(LeafConfig.AvoidRegions) do
 		local halfX = region.Size.X / 2
 		local halfZ = region.Size.Z / 2
-		if x >= region.Center.X - halfX and x <= region.Center.X + halfX
-			and z >= region.Center.Z - halfZ and z <= region.Center.Z + halfZ then
+		local centerX = originX + region.Center.X
+		local centerZ = originZ + region.Center.Z
+		if x >= centerX - halfX and x <= centerX + halfX
+			and z >= centerZ - halfZ and z <= centerZ + halfZ then
 			return true
 		end
 	end
@@ -96,12 +132,47 @@ local function randomRestPosition()
 	for _ = 1, 10 do
 		local x = center.X + (math.random() - 0.5) * size.X
 		local z = center.Z + (math.random() - 0.5) * size.Z
-		if not isInAvoidRegion(x, z) and not isInCleanupZone(x, z) then
+		if not isInAvoidRegion(x, z, "Yard") and not isInCleanupZone(x, z) then
 			return Vector3.new(x, y, z)
 		end
 	end
 
 	return Vector3.new(center.X, y, center.Z)
+end
+
+-- Lobby counterpart of isInCleanupZone -- kept as a separate function (rather than folding into
+-- isInCleanupZone) so the glide-landing callback below can tell which zone a leaf actually landed
+-- in and reward coins only for the real yard zone, never the Lobby's decorative one.
+local function isInLobbyCleanupZone(x, z)
+	if not lobbyCleanupZone then
+		return false
+	end
+	local halfX = lobbyCleanupZone.Size.X / 2
+	local halfZ = lobbyCleanupZone.Size.Z / 2
+	local center = lobbyCleanupZone.Position
+	return x >= center.X - halfX and x <= center.X + halfX
+		and z >= center.Z - halfZ and z <= center.Z + halfZ
+end
+
+-- Lobby counterpart of randomRestPosition -- same shape, but sampled from LobbyGround's own
+-- footprint/height, and avoiding the Lobby's own cleanup zone plus a fixed clear circle around the
+-- SpawnPlatform (dead center of LobbyGround) so leaves don't spawn on top of where players land.
+local function randomLobbyRestPosition()
+	local center = lobbyGround.Position
+	local size = lobbyGround.Size
+	local y = lobbyGroundTop + LeafConfig.LeafSize.Y / 2
+	local spawnClearRadius = 10
+
+	for _ = 1, 10 do
+		local x = center.X + (math.random() - 0.5) * size.X
+		local z = center.Z + (math.random() - 0.5) * size.Z
+		local distFromCenter = math.sqrt((x - center.X) ^ 2 + (z - center.Z) ^ 2)
+		if distFromCenter > spawnClearRadius and not isInLobbyCleanupZone(x, z) then
+			return Vector3.new(x, y, z)
+		end
+	end
+
+	return Vector3.new(center.X + spawnClearRadius + 5, y, center.Z)
 end
 
 local function createLeaf(restPosition)
@@ -119,14 +190,18 @@ local function createLeaf(restPosition)
 	return leaf
 end
 
--- Tracks a leaf as "at rest" so the wind-disturbance scan can find and nudge it.
-local function markResting(leaf, restPosition, yaw)
+-- Tracks a leaf as "at rest" so the wind-disturbance scan can find and nudge it. `zone` ("Yard" or
+-- "Lobby") is preserved through every later mutation of this same table (glides just update
+-- baseX/baseZ/yaw/disturbing in place, never replace it) -- StopYardRound reads it back to know
+-- which resting leaves are the yard's to clear without touching the Lobby's.
+local function markResting(leaf, restPosition, yaw, zone)
 	restingLeaves[leaf] = {
 		baseX = restPosition.X,
 		baseZ = restPosition.Z,
 		restY = restPosition.Y,
 		yaw = yaw,
 		disturbing = false,
+		zone = zone,
 	}
 end
 
@@ -147,16 +222,16 @@ local function playConsumeVFX(position)
 	consumeFlashEmitter:Emit(1)
 end
 
--- Drives the billboard progress bar: a ONE-TIME goal (0 -> 100% across CleanupZoneGoal leaves,
--- matching the map's whole fixed leaf budget), not a repeating quota -- climbs to 100% and stays
--- there once every leaf on the map has been delivered, so it doubles as "is the map clean yet."
--- Accepts a count > 1 (the sack system can deliver up to SackConfig.MaxCapacity leaves in one go),
--- clamped so a big delivery landing right at/past the goal can't overshoot past 100%.
+-- Drives the progress bar: climbs 0 -> 100% across this round's map's own Goal (MapConfig.luau,
+-- set fresh each round by StartYardRound below), resetting each time a new round starts -- this
+-- used to be a one-time goal against the map's whole leaf budget; now it's per-round, matching
+-- RoundSystem's goal-or-timer end condition. Accepts a count > 1 (the sack system can deliver up
+-- to SackConfig.MaxCapacity leaves in one go), clamped so a big delivery landing right at/past the
+-- goal can't overshoot 100%.
 local function registerZoneProgress(count)
-	local goal = LeafConfig.CleanupZoneGoal
-	zoneCycleCount = math.min(zoneCycleCount + count, goal)
+	zoneCycleCount = math.min(zoneCycleCount + count, yardGoal)
 	Workspace:SetAttribute("CleanupZoneCount", zoneCycleCount)
-	Workspace:SetAttribute("CleanupZoneProgress", zoneCycleCount / goal)
+	Workspace:SetAttribute("CleanupZoneProgress", zoneCycleCount / yardGoal)
 end
 
 -- A leaf "arriving" in the cleanup zone: untracked, VFX'd, and destroyed in one shot so it can
@@ -170,6 +245,15 @@ local function consumeLeaf(leaf, x, y, z, player)
 	Workspace:SetAttribute("LeavesCleaned", leavesCleanedCount)
 	registerZoneProgress(1)
 	notifyDelivery(player, 1)
+	leaf:Destroy()
+end
+
+-- Lobby's cleanup zone equivalent -- same VFX/despawn, but deliberately skips leavesCleanedCount,
+-- registerZoneProgress, and notifyDelivery entirely: the Lobby is just an intro space, not part of
+-- the yard's coin/progress economy, so a leaf landing here earns nothing and moves no stat.
+local function consumeLobbyLeaf(leaf, x, y, z)
+	restingLeaves[leaf] = nil
+	playConsumeVFX(Vector3.new(x, y, z))
 	leaf:Destroy()
 end
 
@@ -188,6 +272,19 @@ function LeafSpawner.DeliverToZone(count, position, player)
 	Workspace:SetAttribute("LeavesCleaned", leavesCleanedCount)
 	registerZoneProgress(count)
 	notifyDelivery(player, count)
+end
+
+-- Lobby counterpart of DeliverToZone, for a physical sack dropped/carried into LobbyCleanupZone --
+-- same VFX burst, but deliberately no LeavesCleaned/registerZoneProgress/notifyDelivery, same as
+-- consumeLobbyLeaf for loose leaves. Count isn't used for anything here (no stat to add it to) but
+-- kept in the signature to mirror DeliverToZone's shape at the SackSystem call site.
+function LeafSpawner.DeliverToLobbyZone(count, position)
+	if count <= 0 then
+		return
+	end
+	if position then
+		playConsumeVFX(position)
+	end
 end
 
 -- A leaf picked directly off the ground into a player's sack (as opposed to blown into the
@@ -262,11 +359,35 @@ local function clampTargetForObstacles(fromX, fromZ, y, targetX, targetZ)
 
 	-- Hard backstop independent of the raycast above: a target can never end up outside the
 	-- playable area at all, regardless of grazing angles or thin geometry at the map's edge.
-	local halfX = spawnArea.Size.X / 2 - 2
-	local halfZ = spawnArea.Size.Z / 2 - 2
-	local center = spawnArea.Position
-	targetX = math.clamp(targetX, center.X - halfX, center.X + halfX)
-	targetZ = math.clamp(targetZ, center.Z - halfZ, center.Z + halfZ)
+	-- Picks the yard's or the Lobby's own bounds based on which one the leaf is actually in right
+	-- now (fromX/fromZ, its pre-push position) -- the two areas sit far enough apart that this is
+	-- unambiguous, and it means a Lobby leaf never gets clamped against the yard's bounds (or
+	-- vice versa) just because this function only used to know about one area. spawnArea is nil
+	-- whenever no round is active (Map1 hidden -- see StartYardRound/StopYardRound), which is the
+	-- common case now, so this can't assume it's set the way it safely could before rounds existed.
+	local areaCenter, areaSize
+	if lobbyGround and spawnArea then
+		local yardDist = (fromX - spawnArea.Position.X) ^ 2 + (fromZ - spawnArea.Position.Z) ^ 2
+		local lobbyDist = (fromX - lobbyGround.Position.X) ^ 2 + (fromZ - lobbyGround.Position.Z) ^ 2
+		if lobbyDist < yardDist then
+			areaCenter, areaSize = lobbyGround.Position, lobbyGround.Size
+		else
+			areaCenter, areaSize = spawnArea.Position, spawnArea.Size
+		end
+	elseif lobbyGround then
+		areaCenter, areaSize = lobbyGround.Position, lobbyGround.Size
+	elseif spawnArea then
+		areaCenter, areaSize = spawnArea.Position, spawnArea.Size
+	else
+		-- Neither area known yet (e.g. called before LeafSpawner.Start()'s Lobby lookup finishes) --
+		-- an unbounded "clamp" that doesn't actually restrict anything is the safe default here.
+		areaCenter, areaSize = Vector3.new(fromX, 0, fromZ), Vector3.new(1e6, 4, 1e6)
+	end
+
+	local halfX = areaSize.X / 2 - 2
+	local halfZ = areaSize.Z / 2 - 2
+	targetX = math.clamp(targetX, areaCenter.X - halfX, areaCenter.X + halfX)
+	targetZ = math.clamp(targetZ, areaCenter.Z - halfZ, areaCenter.Z + halfZ)
 
 	return targetX, targetZ
 end
@@ -295,7 +416,7 @@ end
 -- The motion itself is replicated as PARAMETERS (Attributes), not a per-frame CFrame stream --
 -- clients render it locally via LeafMotion/LeafRenderer. This function only sets the leaf's
 -- starting pose directly; task.delay schedules the landing at the exact computed duration.
-local function beginFall(leaf, restPosition)
+local function beginFall(leaf, restPosition, zone)
 	local fallHeight = LeafConfig.FallHeightMin + math.random() * (LeafConfig.FallHeightMax - LeafConfig.FallHeightMin)
 	local fallSpeed = LeafConfig.FallSpeedMin + math.random() * (LeafConfig.FallSpeedMax - LeafConfig.FallSpeedMin)
 	local duration = fallHeight / fallSpeed
@@ -340,6 +461,7 @@ local function beginFall(leaf, restPosition)
 		tumbleAmplitude = tumbleAmplitude,
 		tumbleFreq = 1 + math.random() * 1.5,
 		initialYaw = math.rad(math.random(0, 360)),
+		zone = zone,
 	}
 
 	leaf.CFrame = CFrame.new(spawnBaseX, spawnY, spawnBaseZ)
@@ -383,7 +505,7 @@ local function beginFall(leaf, restPosition)
 		-- Tracked at the stable, unbumped ground height (not finalCFrame's actual bumped Y) so this
 		-- leaf's NEXT glide keeps computing from a fixed baseline instead of drifting upward over
 		-- repeated moves. See randomStackHeight's comment.
-		markResting(leaf, Vector3.new(finalCFrame.Position.X, groundY, finalCFrame.Position.Z), landedYaw)
+		markResting(leaf, Vector3.new(finalCFrame.Position.X, groundY, finalCFrame.Position.Z), landedYaw, state.zone)
 	end)
 end
 
@@ -398,7 +520,7 @@ local function startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, sp
 	targetX, targetZ = clampTargetForObstacles(rest.baseX, rest.baseZ, rest.restY, targetX, targetZ)
 
 	-- Don't drag a leaf into the cleanup zone fence or house footprint.
-	if isInAvoidRegion(targetX, targetZ) then
+	if isInAvoidRegion(targetX, targetZ, rest.zone) then
 		return
 	end
 
@@ -484,15 +606,22 @@ local function startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, sp
 	leaf:SetAttribute("MotionStart", Workspace:GetServerTimeNow())
 
 	task.delay(duration, function()
+		-- A round ending mid-glide (StopYardRound) destroys this leaf and drops its restingLeaves
+		-- entry immediately -- bail out rather than register a delivery/VFX for an already-destroyed
+		-- leaf, or resurrect a detached `rest` table nothing references anymore.
+		if not leaf.Parent then
+			return
+		end
+
 		if isInCleanupZone(targetX, targetZ) then
 			consumeLeaf(leaf, targetX, rest.restY, targetZ, player)
+		elseif isInLobbyCleanupZone(targetX, targetZ) then
+			consumeLobbyLeaf(leaf, targetX, rest.restY, targetZ)
 		else
-			if leaf.Parent then
-				-- landingRestY (baked into params.restY above) already carries this landing's pile
-				-- bump, so the leaf converges on it exactly -- matches what every client already
-				-- rendered on its own last frame, no extra write needed.
-				leaf.CFrame = LeafMotion.ComputeGlide(params, duration)
-			end
+			-- landingRestY (baked into params.restY above) already carries this landing's pile
+			-- bump, so the leaf converges on it exactly -- matches what every client already
+			-- rendered on its own last frame, no extra write needed.
+			leaf.CFrame = LeafMotion.ComputeGlide(params, duration)
 			rest.baseX = targetX
 			rest.baseZ = targetZ
 			rest.yaw = params.targetYaw
@@ -586,13 +715,16 @@ local function pullRestingLeaf(leaf, rest, origin, rakeConfig, player)
 	startGlide(leaf, rest, targetX, targetZ, duration, liftHeight, spinDegrees, player)
 end
 
--- ONE-TIME lifetime budget, not hysteresis: spawns up to FallingTargetCount total (tracked here,
--- not re-derived from the current on-map count) and then the loop simply ends -- no refilling once
--- leaves land, get collected, or despawn. FallingMaxConcurrent still throttles how many are
--- actively mid-fall at once, purely so the sky doesn't dump the whole budget in one visual burst.
+-- Per-ROUND budget now, not lifetime: spawns up to this map's own FallingLeafCount (MapConfig.luau,
+-- captured into yardFallingTarget by StartYardRound) for this round and stops -- gated on
+-- yardRoundActive so StopYardRound can interrupt it mid-spawn when a round ends early (goal met,
+-- timer, or an admin's :finishround), not just when it naturally runs out. Restarting a round calls
+-- this fresh via StartYardRound, so totalSpawned resets to 0 each time.
+-- FallingMaxConcurrent still throttles how many are actively mid-fall at once, purely so the sky
+-- doesn't dump the whole budget in one visual burst.
 local function runFallingSpawnLoop()
 	local totalSpawned = 0
-	while totalSpawned < LeafConfig.FallingTargetCount do
+	while yardRoundActive and totalSpawned < yardFallingTarget do
 		local fallingCount = 0
 		for _ in pairs(fallingLeaves) do
 			fallingCount += 1
@@ -601,14 +733,14 @@ local function runFallingSpawnLoop()
 		if fallingCount < LeafConfig.FallingMaxConcurrent then
 			local toSpawn = math.min(
 				LeafConfig.FallingSpawnBatchSize,
-				LeafConfig.FallingTargetCount - totalSpawned,
+				yardFallingTarget - totalSpawned,
 				LeafConfig.FallingMaxConcurrent - fallingCount
 			)
 			for _ = 1, math.max(toSpawn, 0) do
 				local restPosition = randomRestPosition()
 				local leaf = createLeaf(restPosition)
 				leaf.Parent = fallingFolder
-				beginFall(leaf, restPosition)
+				beginFall(leaf, restPosition, "Yard")
 				totalSpawned += 1
 			end
 		end
@@ -637,21 +769,89 @@ local function spawnGroundCluster()
 		local yaw = math.rad(math.random(0, 360))
 		leaf.CFrame = CFrame.new(restPosition) * CFrame.Angles(0, yaw, 0)
 		leaf.Parent = groundFolder
-		markResting(leaf, restPosition, yaw)
+		markResting(leaf, restPosition, yaw, "Yard")
 	end
 end
 
--- ONE-TIME lifetime budget, not hysteresis: spawns up to GroundMaxLeaves total (tracked here, not
+-- ONE-TIME lifetime budget, not hysteresis: spawns up to this map's own GroundLeafCount
+-- (MapConfig.luau, captured into yardGroundTarget by StartYardRound) total (tracked here, not
 -- re-derived from the current on-map count) and then the loop simply ends -- no refilling. Leaves
 -- never despawn on their own either (no lifetime timer), so the map's leaf population only ever
 -- goes down via a player actually delivering/collecting them.
 local function runGroundSpawnLoop()
 	local totalSpawned = 0
+	while yardRoundActive and totalSpawned < yardGroundTarget do
+		local remaining = yardGroundTarget - totalSpawned
+		local clustersToSpawn = math.min(LeafConfig.GroundSpawnBatchSize, math.ceil(remaining / LeafConfig.GroundClusterSize))
+		for _ = 1, math.max(clustersToSpawn, 0) do
+			spawnGroundCluster()
+			totalSpawned += LeafConfig.GroundClusterSize
+		end
+		task.wait(LeafConfig.GroundSpawnInterval)
+	end
+end
+
+-- Lobby counterparts of the three functions above -- same exact mechanics/budget numbers
+-- (LeafConfig.FallingTargetCount + GroundMaxLeaves, same 700/10,300 = 11,000 total the yard uses),
+-- just sampled from randomLobbyRestPosition and parented into the SAME shared fallingFolder/
+-- groundFolder as the yard's leaves. Sharing those folders (rather than separate Lobby-only ones)
+-- is what lets ApplyBlow/ApplyRake/runWindDisturbanceLoop -- none of which know or care about
+-- "zones," only the shared restingLeaves/fallingLeaves tables and these two folders -- affect
+-- Lobby leaves for free, with zero changes to any of them.
+local function runLobbyFallingSpawnLoop()
+	local totalSpawned = 0
+	while totalSpawned < LeafConfig.FallingTargetCount do
+		local fallingCount = 0
+		for _ in pairs(fallingLeaves) do
+			fallingCount += 1
+		end
+
+		if fallingCount < LeafConfig.FallingMaxConcurrent then
+			local toSpawn = math.min(
+				LeafConfig.FallingSpawnBatchSize,
+				LeafConfig.FallingTargetCount - totalSpawned,
+				LeafConfig.FallingMaxConcurrent - fallingCount
+			)
+			for _ = 1, math.max(toSpawn, 0) do
+				local restPosition = randomLobbyRestPosition()
+				local leaf = createLeaf(restPosition)
+				leaf.Parent = fallingFolder
+				beginFall(leaf, restPosition, "Lobby")
+				totalSpawned += 1
+			end
+		end
+
+		task.wait(LeafConfig.FallingSpawnInterval)
+	end
+end
+
+local function spawnLobbyGroundCluster()
+	local center = randomLobbyRestPosition()
+	local stackHeight = 0
+
+	for _ = 1, LeafConfig.GroundClusterSize do
+		local angle = math.random() * math.pi * 2
+		local radius = math.random() * LeafConfig.GroundClusterRadius
+		local x = center.X + math.cos(angle) * radius
+		local z = center.Z + math.sin(angle) * radius
+		stackHeight += LeafConfig.GroundStackHeightMin + math.random() * (LeafConfig.GroundStackHeightMax - LeafConfig.GroundStackHeightMin)
+		local restPosition = Vector3.new(x, center.Y + stackHeight, z)
+
+		local leaf = createLeaf(restPosition)
+		local yaw = math.rad(math.random(0, 360))
+		leaf.CFrame = CFrame.new(restPosition) * CFrame.Angles(0, yaw, 0)
+		leaf.Parent = groundFolder
+		markResting(leaf, restPosition, yaw, "Lobby")
+	end
+end
+
+local function runLobbyGroundSpawnLoop()
+	local totalSpawned = 0
 	while totalSpawned < LeafConfig.GroundMaxLeaves do
 		local remaining = LeafConfig.GroundMaxLeaves - totalSpawned
 		local clustersToSpawn = math.min(LeafConfig.GroundSpawnBatchSize, math.ceil(remaining / LeafConfig.GroundClusterSize))
 		for _ = 1, math.max(clustersToSpawn, 0) do
-			spawnGroundCluster()
+			spawnLobbyGroundCluster()
 			totalSpawned += LeafConfig.GroundClusterSize
 		end
 		task.wait(LeafConfig.GroundSpawnInterval)
@@ -729,7 +929,7 @@ function LeafSpawner.ApplyBlow(player, origin, direction, blowConfig)
 				-- Same obstacle clamp as resting leaves -- this path was missing it before, which
 				-- is why leaves being blown mid-air could still sail through walls/boundary edges.
 				local newX, newZ = clampTargetForObstacles(state.baseX, state.baseZ, state.restY, wantedX, wantedZ)
-				if not isInAvoidRegion(newX, newZ) then
+				if not isInAvoidRegion(newX, newZ, state.zone) then
 					state.baseX = newX
 					state.baseZ = newZ
 					-- Re-replicate the redirected target so clients mid-render pick up the change
@@ -783,7 +983,7 @@ function LeafSpawner.ApplyRake(player, origin, direction, rakeConfig)
 					local wantedX = state.baseX + pullX * step
 					local wantedZ = state.baseZ + pullZ * step
 					local newX, newZ = clampTargetForObstacles(state.baseX, state.baseZ, state.restY, wantedX, wantedZ)
-					if not isInAvoidRegion(newX, newZ) then
+					if not isInAvoidRegion(newX, newZ, state.zone) then
 						state.baseX = newX
 						state.baseZ = newZ
 						leaf:SetAttribute("FallTargetX", newX)
@@ -801,12 +1001,36 @@ function LeafSpawner.Start()
 	end
 	started = true
 
-	spawnArea = Workspace:WaitForChild("LeafSpawnArea")
-	cleanupZone = Workspace:WaitForChild("CleanupZone")
-	local ground = Workspace:WaitForChild("Ground")
-	groundTop = ground.Position.Y + ground.Size.Y / 2
+	-- init.server.luau calls every system's Start() sequentially on one thread -- LeafSpawner runs
+	-- 2nd, so anything blocking here used to stall the other ~15 systems after it (SaveSystem's
+	-- GetDataStore call was exactly this bug earlier this session). StartingLobby is static content
+	-- baked into leaf.rbxlx, so it should always be there -- but a stale Studio session (place
+	-- edited on disk, not reopened) or a bad file would otherwise hang this forever. Deferred to its
+	-- own thread with a real timeout so that failure mode can only ever disable Lobby leaves for
+	-- this session, never anything else. Map1/the yard is NOT looked up here at all anymore --
+	-- RoundSystem reveals it and calls StartYardRound() directly once it's confirmed present, so
+	-- there's nothing to wait/time out on for the yard side (see that function below).
+	task.spawn(function()
+		local startingLobby = Workspace:WaitForChild("StartingLobby", 15)
+		if not startingLobby then
+			warn("[LeafSpawner] Workspace.StartingLobby not found after 15s -- Lobby leaves disabled this session. If you just edited leaf.rbxlx, close Studio's session for it (without saving) and reopen the file fresh.")
+			return
+		end
+		lobbyGround = startingLobby:WaitForChild("LobbyGround")
+		lobbyGroundTop = lobbyGround.Position.Y + lobbyGround.Size.Y / 2
+		lobbyCleanupZone = startingLobby:WaitForChild("LobbyCleanupZone")
 
-	-- Single reused VFX source for every leaf consumed by the cleanup zone -- see playConsumeVFX.
+		startLeafSpawning()
+	end)
+end
+
+-- Everything past the StartingLobby lookup above -- split out so LeafSpawner.Start() itself can
+-- return immediately regardless of how long (or whether) that lookup succeeds.
+function startLeafSpawning()
+	-- Single reused VFX source for every leaf consumed by either cleanup zone -- see
+	-- playConsumeVFX. Positioned at the Lobby's zone for now since that's the only one guaranteed
+	-- to exist at this point; playConsumeVFX repositions it before every actual use anyway, so its
+	-- position here is never seen.
 	consumeVFXPart = Instance.new("Part")
 	consumeVFXPart.Name = "LeafConsumeVFX"
 	consumeVFXPart.Anchored = true
@@ -815,7 +1039,7 @@ function LeafSpawner.Start()
 	consumeVFXPart.CastShadow = false
 	consumeVFXPart.Transparency = 1
 	consumeVFXPart.Size = Vector3.new(0.2, 0.2, 0.2)
-	consumeVFXPart.CFrame = CFrame.new(cleanupZone.Position)
+	consumeVFXPart.CFrame = CFrame.new(lobbyCleanupZone.Position)
 	consumeVFXPart.Parent = Workspace
 
 	-- Bright sparkle burst, arcing outward/upward then falling -- color deliberately far from the
@@ -877,9 +1101,69 @@ function LeafSpawner.Start()
 	groundFolder.Name = "Ground"
 	groundFolder.Parent = leavesFolder
 
+	task.spawn(runLobbyFallingSpawnLoop)
+	task.spawn(runLobbyGroundSpawnLoop)
+	task.spawn(runWindDisturbanceLoop)
+end
+
+-- Called by RoundSystem right after it reparents the round's map into Workspace, passing that map
+-- folder AND its MapConfig entry directly (MapConfig-driven -- see RoundSystem.luau -- rather than
+-- this module hardcoding "Map1" or a global leaf budget itself, so a second/harder map in the pool
+-- needs no changes here, just its own MapConfig entry). The folder is guaranteed present by the
+-- time this runs, so the WaitForChild calls below resolve instantly; this never blocks. Resets the
+-- round-scoped CleanupZoneProgress/Count to 0 and (re)starts the yard's two spawn loops, which run
+-- until either they hit their per-round budget (mapEntry.FallingLeafCount/GroundLeafCount) or
+-- StopYardRound interrupts them.
+function LeafSpawner.StartYardRound(map1, mapEntry)
+	if yardRoundActive then
+		return
+	end
+
+	if not map1 or not mapEntry then
+		warn("[LeafSpawner] StartYardRound called without a map folder/MapConfig entry -- RoundSystem should pass both in.")
+		return
+	end
+
+	spawnArea = map1:WaitForChild("LeafSpawnArea")
+	cleanupZone = map1:WaitForChild("CleanupZone")
+	local ground = map1:WaitForChild("Ground")
+	groundTop = ground.Position.Y + ground.Size.Y / 2
+
+	yardFallingTarget = mapEntry.FallingLeafCount
+	yardGroundTarget = mapEntry.GroundLeafCount
+	yardGoal = mapEntry.Goal
+
+	yardRoundActive = true
+	zoneCycleCount = 0
+	Workspace:SetAttribute("CleanupZoneCount", 0)
+	Workspace:SetAttribute("CleanupZoneProgress", 0)
+
 	task.spawn(runFallingSpawnLoop)
 	task.spawn(runGroundSpawnLoop)
-	task.spawn(runWindDisturbanceLoop)
+end
+
+-- Called by RoundSystem when a round ends (goal met or timer expired), before it hides Map1 again.
+-- Stops the yard's spawn loops (they check yardRoundActive each iteration) and destroys every
+-- currently-tracked yard-zone leaf, resting or mid-flight, so the next round starts from a clean
+-- map instead of accumulating leaves across rounds. Lobby leaves are untouched (different zone tag).
+function LeafSpawner.StopYardRound()
+	if not yardRoundActive then
+		return
+	end
+	yardRoundActive = false
+
+	for leaf, rest in pairs(restingLeaves) do
+		if rest.zone == "Yard" then
+			restingLeaves[leaf] = nil
+			leaf:Destroy()
+		end
+	end
+	for leaf, state in pairs(fallingLeaves) do
+		if state.zone == "Yard" then
+			fallingLeaves[leaf] = nil
+			leaf:Destroy()
+		end
+	end
 end
 
 return LeafSpawner

@@ -19,10 +19,27 @@ local function findRootPart(rig)
 		or rig:FindFirstChildWhichIsA("BasePart", true)
 end
 
--- Finds `rigName` in Workspace (waits up to 10s in case it's still streaming in) and attaches a
--- ProximityPrompt to its root part. `onTriggered(player)` fires on interaction.
+-- Instance:WaitForChild only ever checks DIRECT children, never descendants -- and now that map
+-- content is grouped into folders (Map1, StartingLobby -- see CLAUDE.md), an NPC rig ending up
+-- nested inside one of those instead of straight under Workspace is a real possibility, not just a
+-- hypothetical. Polls FindFirstChild(name, true) (which IS recursive) instead, on the same overall
+-- timeout budget WaitForChild used to give this -- works the same regardless of nesting depth.
+local function waitForRig(rigName, timeout)
+	local deadline = os.clock() + timeout
+	repeat
+		local rig = Workspace:FindFirstChild(rigName, true)
+		if rig then
+			return rig
+		end
+		task.wait(0.1)
+	until os.clock() >= deadline
+	return Workspace:FindFirstChild(rigName, true)
+end
+
+-- Finds `rigName` anywhere under Workspace (waits up to 10s in case it's still streaming in) and
+-- attaches a ProximityPrompt to its root part. `onTriggered(player)` fires on interaction.
 function NPCInteraction.RegisterTalkPrompt(rigName, promptText, onTriggered)
-	local rig = Workspace:WaitForChild(rigName, 10)
+	local rig = waitForRig(rigName, 10)
 	if not rig then
 		warn(string.format(
 			"[NPCInteraction] no '%s' found in Workspace -- place the rig, named exactly this, for its interaction to work",

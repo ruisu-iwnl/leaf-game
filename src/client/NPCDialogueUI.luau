@@ -86,7 +86,10 @@ local function buildPortraitInto(viewport, rigName)
 		end
 	end
 
-	local rig = Workspace:FindFirstChild(rigName)
+	-- Recursive: rigs now live nested inside map-organization folders (e.g. Ruisu under
+	-- Workspace.StartingLobby), not straight under Workspace -- a plain (non-recursive)
+	-- FindFirstChild would silently never find it, and this portrait would just never appear.
+	local rig = Workspace:FindFirstChild(rigName, true)
 	if not rig then
 		return
 	end
@@ -407,7 +410,7 @@ function NPCDialogueUI.Start()
 			proximityConn:Disconnect()
 			proximityConn = nil
 		end
-		local rig = Workspace:FindFirstChild(config.rigName)
+		local rig = Workspace:FindFirstChild(config.rigName, true) -- recursive, see buildPortraitInto's comment
 		local rigRoot = rig and findRigRootPart(rig)
 		if rigRoot then
 			proximityConn = RunService.Heartbeat:Connect(function()

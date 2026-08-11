@@ -14,6 +14,7 @@ local SACK_DELIVERY_INTERVAL = 0.2
 local POOF_LIGHT_DIM_INFO = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 local cleanupZone
+local lobbyCleanupZone
 local groundPart
 local remotes
 local collectLeafRemote
@@ -35,6 +36,20 @@ local function isInCleanupZone(position)
 	local halfX = cleanupZone.Size.X / 2
 	local halfZ = cleanupZone.Size.Z / 2
 	local center = cleanupZone.Position
+	return position.X >= center.X - halfX and position.X <= center.X + halfX
+		and position.Z >= center.Z - halfZ and position.Z <= center.Z + halfZ
+end
+
+-- Lobby counterpart -- kept separate (not folded into isInCleanupZone) so runSackDeliveryLoop can
+-- tell which zone a sack landed in and only pay out via the real yard zone, same reasoning as
+-- LeafSpawner's isInCleanupZone/isInLobbyCleanupZone split for loose leaves.
+local function isInLobbyCleanupZone(position)
+	if not lobbyCleanupZone then
+		return false
+	end
+	local halfX = lobbyCleanupZone.Size.X / 2
+	local halfZ = lobbyCleanupZone.Size.Z / 2
+	local center = lobbyCleanupZone.Position
 	return position.X >= center.X - halfX and position.X <= center.X + halfX
 		and position.Z >= center.Z - halfZ and position.Z <= center.Z + halfZ
 end
@@ -305,13 +320,19 @@ local function runSackDeliveryLoop()
 	while true do
 		for tool in pairs(activeSacks) do
 			local handle = tool.Parent and tool:FindFirstChild("Handle")
-			if handle and isInCleanupZone(handle.Position) then
+			local inYardZone = handle and isInCleanupZone(handle.Position)
+			local inLobbyZone = handle and not inYardZone and isInLobbyCleanupZone(handle.Position)
+			if inYardZone or inLobbyZone then
 				local leafCount = tool:GetAttribute("LeafCount") or 0
 				activeSacks[tool] = nil
 
 				local ownerUserId = tool:GetAttribute("OwnerUserId")
 				local owner = ownerUserId and Players:GetPlayerByUserId(ownerUserId)
-				LeafSpawner.DeliverToZone(leafCount, handle.Position, owner)
+				if inYardZone then
+					LeafSpawner.DeliverToZone(leafCount, handle.Position, owner)
+				else
+					LeafSpawner.DeliverToLobbyZone(leafCount, handle.Position)
+				end
 
 				if owner then
 					owner:SetAttribute("ActiveSackCount", math.max((owner:GetAttribute("ActiveSackCount") or 1) - 1, 0))
@@ -572,9 +593,80 @@ local function onPlayerAdded(player)
 	end
 end
 
+-- Called by RoundSystem right after it reparents the round's map into Workspace (same moment it
+-- calls LeafSpawner.StartYardRound()), passing that map folder directly (MapConfig-driven -- see
+-- RoundSystem.luau -- rather than this module hardcoding "Map1" itself). The folder is guaranteed
+-- present by then, so this never needs to wait/time out. Yard sack delivery is nil-guarded
+-- (isInCleanupZone) everywhere it's read, so cleanupZone/groundPart being nil during Intermission
+-- (no round active) is expected, not an error.
+function SackSystem.StartYardRound(map1)
+	if not map1 then
+		warn("[SackSystem] StartYardRound called without a map folder -- RoundSystem should pass one in.")
+		return
+	end
+	cleanupZone = map1:WaitForChild("CleanupZone")
+	groundPart = map1:WaitForChild("Ground")
+end
+
+-- Called by RoundSystem right before it hides the map at round end -- clears the yard references
+-- (rather than leaving them stale-but-pointing-at-real-parts) so a sack can't accidentally
+-- register a delivery against yard coordinates while the map is hidden and nothing should be there.
+function SackSystem.StopYardRound()
+	cleanupZone = nil
+	groundPart = nil
+end
+
+-- Called by RoundSystem right as a fresh round starts Loading, before anyone's teleported --
+-- wipes anything this player could otherwise carry INTO the round to cheese an instant delivery:
+-- their click-collected leaf counter (SackStorage) and every physical LeafSack Tool they're
+-- holding, wherever it currently is (equipped in Character, stowed in Backpack, or dropped loose
+-- in Workspace). Not a delivery -- these leaves are just discarded, not paid out, since carrying
+-- them into a new round in the first place would have been the exploit.
+function SackSystem.ResetPlayerForRound(player)
+	player:SetAttribute("SackStorage", 0)
+	player:SetAttribute("ActiveSackCount", 0)
+
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack then
+		for _, tool in ipairs(backpack:GetChildren()) do
+			if tool:IsA("Tool") and tool.Name == SACK_TOOL_NAME then
+				tool:Destroy()
+			end
+		end
+	end
+
+	local character = player.Character
+	if character then
+		for _, tool in ipairs(character:GetChildren()) do
+			if tool:IsA("Tool") and tool.Name == SACK_TOOL_NAME then
+				tool:Destroy()
+			end
+		end
+	end
+
+	for tool in pairs(activeSacks) do
+		if tool:GetAttribute("OwnerUserId") == player.UserId then
+			activeSacks[tool] = nil
+			tool:Destroy()
+		end
+	end
+end
+
 function SackSystem.Start()
-	cleanupZone = Workspace:WaitForChild("CleanupZone")
-	groundPart = Workspace:WaitForChild("Ground")
+	-- StartingLobby lookup deferred to its own thread, same reasoning/pattern as LeafSpawner.Start()
+	-- -- Lobby sack delivery just doesn't work until it resolves, not a hang blocking every system
+	-- after this one (Remotes creation below, which several other systems' Start() calls need,
+	-- stays synchronous and unaffected). Map1/yard fields are handled by StartYardRound/StopYardRound
+	-- above instead of here -- see LeafSpawner's matching comment for why boot-time was wrong for them.
+	task.spawn(function()
+		local startingLobby = Workspace:WaitForChild("StartingLobby", 15)
+		if not startingLobby then
+			warn("[SackSystem] Workspace.StartingLobby not found after 15s -- Lobby sack delivery disabled this session.")
+			return
+		end
+		lobbyCleanupZone = startingLobby:WaitForChild("LobbyCleanupZone")
+	end)
+
 	setupPickupAnimation()
 	setupTieSackAnimation()
 	setupPoofVFX()

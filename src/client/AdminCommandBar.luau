@@ -59,39 +59,50 @@ local function buildUI()
 	return box
 end
 
+-- init.client.luau starts every UI module in one sequential list -- this used to WaitForChild the
+-- remotes directly in Start() with no timeout, which meant if Remotes was ever slow to replicate
+-- (e.g. a heavier place taking longer to load), this dev-only command bar silently blocked every
+-- module listed after it (HotbarUI, CoinsUI, PlayerListUI, LeafRenderer, the store, all of it)
+-- from ever starting. Deferred to its own thread so a slow/missing remote only breaks this bar.
 function AdminCommandBar.Start()
-	local remotes = ReplicatedStorage.Shared:WaitForChild("Remotes")
-	local adminCommandRemote = remotes:WaitForChild("AdminCommand")
-
-	local box = buildUI()
-
-	local function show()
-		box.Visible = true
-		box.Text = ""
-		box:CaptureFocus()
-	end
-
-	local function hide()
-		box.Visible = false
-		box:ReleaseFocus()
-	end
-
-	-- gameProcessedEvent is true while the box itself has focus (the keystroke's going into the
-	-- textbox, not to us), so this only ever fires the toggle when the bar is closed/unfocused.
-	UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
-		if gameProcessedEvent then
+	task.spawn(function()
+		local remotes = ReplicatedStorage.Shared:WaitForChild("Remotes", 30)
+		local adminCommandRemote = remotes and remotes:WaitForChild("AdminCommand", 30)
+		if not adminCommandRemote then
+			warn("[AdminCommandBar] AdminCommand remote never appeared -- command bar disabled")
 			return
 		end
-		if input.KeyCode == TOGGLE_KEY and not box.Visible then
-			show()
-		end
-	end)
 
-	box.FocusLost:Connect(function(enterPressed)
-		if enterPressed and #box.Text > 0 then
-			adminCommandRemote:FireServer(box.Text)
+		local box = buildUI()
+
+		local function show()
+			box.Visible = true
+			box.Text = ""
+			box:CaptureFocus()
 		end
-		hide()
+
+		local function hide()
+			box.Visible = false
+			box:ReleaseFocus()
+		end
+
+		-- gameProcessedEvent is true while the box itself has focus (the keystroke's going into the
+		-- textbox, not to us), so this only ever fires the toggle when the bar is closed/unfocused.
+		UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+			if gameProcessedEvent then
+				return
+			end
+			if input.KeyCode == TOGGLE_KEY and not box.Visible then
+				show()
+			end
+		end)
+
+		box.FocusLost:Connect(function(enterPressed)
+			if enterPressed and #box.Text > 0 then
+				adminCommandRemote:FireServer(box.Text)
+			end
+			hide()
+		end)
 	end)
 end
 

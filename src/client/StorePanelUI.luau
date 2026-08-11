@@ -1,7 +1,9 @@
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local BlowerConfig = require(ReplicatedStorage.Shared.BlowerConfig)
 local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
@@ -14,6 +16,20 @@ local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
 local UpgradeConfig = require(ReplicatedStorage.Shared.UpgradeConfig)
 
 local TOOL_CONFIGS = { LeafBlower = BlowerConfig, LeafRake = RakeConfig, LeafSack = SackConfig }
+
+-- Same distance/reasoning as NPCDialogueUI's own AUTO_CLOSE_DISTANCE -- a little past
+-- NPCInteraction's ProximityPrompt activation distance (10 studs), so walking away closes the
+-- panel only once you're genuinely out of range, not right at the boundary where the prompt itself
+-- is also flickering in and out.
+local AUTO_CLOSE_DISTANCE = 14
+
+-- Small local copy of NPCDialogueUI's own findRigRootPart -- not worth a shared client util module
+-- for one three-line helper.
+local function findRigRootPart(rig)
+	return rig:FindFirstChild("HumanoidRootPart")
+		or rig.PrimaryPart
+		or rig:FindFirstChildWhichIsA("BasePart", true)
+end
 
 -- The actual shop window Ruisu's "Yes" opens (see StoreDialogueUI.luau). Shows every upgrade/perk/
 -- cosmetic from the real catalogs (UpgradeConfig.luau/PerkConfig.luau/CosmeticConfig.luau -- the
@@ -759,6 +775,7 @@ function StorePanelUI.Start()
 	end)
 
 	local outsideClickConn = nil
+	local proximityConn = nil
 
 	local function pointInside(guiObject, screenPos)
 		local topLeft = guiObject.AbsolutePosition
@@ -772,6 +789,10 @@ function StorePanelUI.Start()
 		if outsideClickConn then
 			outsideClickConn:Disconnect()
 			outsideClickConn = nil
+		end
+		if proximityConn then
+			proximityConn:Disconnect()
+			proximityConn = nil
 		end
 	end
 
@@ -927,6 +948,25 @@ function StorePanelUI.Start()
 					return
 				end
 				if not pointInside(panel, input.Position) then
+					closePanel()
+				end
+			end)
+		end
+
+		-- Auto-closes if the player walks far enough away from Ruisu while the shop's open -- same
+		-- proximity-close NPCDialogueUI already has for the dialogue box itself. Re-set up fresh
+		-- each Open() call, same reasoning as NPCDialogueUI's own version.
+		if proximityConn then
+			proximityConn:Disconnect()
+			proximityConn = nil
+		end
+		local rig = Workspace:FindFirstChild("Ruisu", true) -- recursive, rig may be nested (see CLAUDE.md)
+		local rigRoot = rig and findRigRootPart(rig)
+		if rigRoot then
+			proximityConn = RunService.Heartbeat:Connect(function()
+				local character = player.Character
+				local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+				if not rootPart or (rootPart.Position - rigRoot.Position).Magnitude > AUTO_CLOSE_DISTANCE then
 					closePanel()
 				end
 			end)
