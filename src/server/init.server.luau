@@ -17,6 +17,7 @@ local RoundSystem = require(script.RoundSystem)
 local SackSystem = require(script.SackSystem)
 local SaveSystem = require(script.SaveSystem)
 local StoreSystem = require(script.StoreSystem)
+local VIPPreferences = require(script.VIPPreferences)
 local WindSystem = require(script.WindSystem)
 
 -- WindSystem first so the WindDirection attribute is already set before the first leaves spawn.
@@ -36,14 +37,19 @@ PurchaseSystem.Start()
 RakeTool.Start()
 StoreSystem.Start()
 RoundSystem.Start()
+VIPPreferences.Start()
 AdminCommands.Start()
 
 -- The one place LeafSpawner's leaf-delivery events get turned into Coins -- keeps LeafSpawner
 -- itself decoupled from Coins/MoneySystem as a concept (see LeafSpawner.OnLeafDelivered). Coins
 -- are scaled by the player's coin-affecting perks (e.g. DoubleGrab) here, in the one place every
 -- payout already routes through -- perks never need touching MoneySystem or LeafSpawner directly.
+-- RollLuckyBonus (the Lucky Leaf perk) is the one exception that ISN'T a flat multiplier -- it's a
+-- per-leaf random roll, so it needs `count` threaded through separately rather than folding into
+-- GetCoinsMultiplier's plain numeric product.
 LeafSpawner.OnLeafDelivered(function(player, count)
-	local coins = count * MoneyConfig.CoinsPerLeaf * PlayerUpgrades.GetCoinsMultiplier(player)
+	local perLeafCoins = MoneyConfig.CoinsPerLeaf * PlayerUpgrades.GetCoinsMultiplier(player)
+	local coins = count * perLeafCoins + PlayerUpgrades.RollLuckyBonus(player, perLeafCoins, count)
 	MoneySystem.AddCoins(player, coins)
 	RoundSystem.RecordCoinsEarned(player, coins)
 	LeavesCleanedStat.Add(player, count)

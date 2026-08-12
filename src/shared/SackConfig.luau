@@ -33,6 +33,10 @@ return {
 			SackColor = Color3.fromRGB(165, 190, 205),
 			SackTieColor = Color3.fromRGB(95, 120, 135),
 		},
+		SackPatron = {
+			SackColor = Color3.fromRGB(90, 40, 135),
+			SackTieColor = Color3.fromRGB(212, 175, 55),
+		},
 	},
 
 	-- The pickup gesture, published as a real Animation asset via Studio's Clip Editor (the

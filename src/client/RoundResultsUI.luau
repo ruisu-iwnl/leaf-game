@@ -34,6 +34,15 @@ local ROW_COUNT_COLOR = Color3.fromRGB(130, 104, 84)
 local FOOTER_COLOR = Color3.fromRGB(150, 130, 112)
 local YOU_NAME_COLOR = Color3.fromRGB(72, 132, 176)
 
+-- Leaf Patron (VIP perk) row treatment -- a royal purple/gold tint, same palette as
+-- CosmeticConfig.luau's Patron skins and the rainbow-nameplate/footstep-trail perk effects, so a
+-- VIP's Results row reads as visibly distinct even outside the top 3. Only applied when the row
+-- isn't already medalled (rank still wins the background -- see addRow) so the two treatments never
+-- compete for the same row.
+local VIP_ROW_BG = Color3.fromRGB(238, 224, 250)
+local VIP_ROW_STROKE = Color3.fromRGB(150, 60, 190)
+local VIP_CROWN = "\u{1F451} "
+
 -- Bonus/compliment vs. penalty/scold -- shared by the round-level performance message and each
 -- row's individual Coins delta, so the two always read as visually consistent (green = good news,
 -- red = bad news) rather than each picking its own palette.
@@ -212,13 +221,22 @@ function RoundResultsUI.Start()
 		local function addRow(rank, entry)
 			local medalled = entry.Count > 0 and RANK_MEDALS[rank] ~= nil
 			local isYou = entry.Name == localPlayerName
+			local isVIP = entry.IsVIP == true
 
 			local row = Instance.new("Frame")
 			row.Name = "Row" .. rank
 			row.LayoutOrder = rank
 			row.Size = UDim2.new(1, 0, 0, ROW_HEIGHT)
-			row.BackgroundColor3 = medalled and RANK_ROW_BG[rank] or CARD_COLOR
-			row.BackgroundTransparency = medalled and 0 or 1
+			if medalled then
+				row.BackgroundColor3 = RANK_ROW_BG[rank]
+				row.BackgroundTransparency = 0
+			elseif isVIP then
+				row.BackgroundColor3 = VIP_ROW_BG
+				row.BackgroundTransparency = 0
+			else
+				row.BackgroundColor3 = CARD_COLOR
+				row.BackgroundTransparency = 1
+			end
 			row.BorderSizePixel = 0
 			row.ZIndex = 41
 			row.Parent = rowsFrame
@@ -231,6 +249,12 @@ function RoundResultsUI.Start()
 				local rowStroke = Instance.new("UIStroke")
 				rowStroke.Color = RANK_STROKE[rank]
 				rowStroke.Transparency = 0.2
+				rowStroke.Thickness = 1.5
+				rowStroke.Parent = row
+			elseif isVIP then
+				local rowStroke = Instance.new("UIStroke")
+				rowStroke.Color = VIP_ROW_STROKE
+				rowStroke.Transparency = 0.15
 				rowStroke.Thickness = 1.5
 				rowStroke.Parent = row
 			elseif isYou then
@@ -263,7 +287,7 @@ function RoundResultsUI.Start()
 			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 			nameLabel.TextColor3 = ROW_NAME_COLOR
 			nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-			nameLabel.Text = entry.Name .. (isYou and " (You)" or "")
+			nameLabel.Text = (isVIP and VIP_CROWN or "") .. entry.Name .. (isYou and " (You)" or "")
 			nameLabel.ZIndex = 42
 			nameLabel.Parent = row
 
@@ -271,6 +295,8 @@ function RoundResultsUI.Start()
 				nameLabel.TextColor3 = TITLE_COLOR
 			elseif isYou then
 				nameLabel.TextColor3 = YOU_NAME_COLOR
+			elseif isVIP then
+				nameLabel.TextColor3 = VIP_ROW_STROKE
 			end
 
 			-- Count is either the only line in this column (vertically centered against nameLabel,

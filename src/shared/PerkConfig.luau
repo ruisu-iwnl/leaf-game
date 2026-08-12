@@ -19,4 +19,39 @@ return {
 		GamePassId = 1941205385,
 		CoinsMultiplier = 2,
 	},
+
+	-- A chance-based bonus instead of a flat multiplier -- rolled per LEAF (not once per whole
+	-- delivery) in PlayerUpgrades.RollLuckyBonus, called from init.server.luau's
+	-- LeafSpawner.OnLeafDelivered listener alongside GetCoinsMultiplier. Stacks fine with 2X Grab:
+	-- the lucky roll's bonus is a multiple of that leaf's ALREADY-doubled rate, not the base rate.
+	-- Robux-only, same shape as DoubleGrab -- see docs/GAMEPASS_SETUP.md for the real Game Pass this
+	-- GamePassId points to (icon: docs/gamepass-lucky-leaf-icon.png).
+	LuckyLeaf = {
+		Id = "LuckyLeaf",
+		Name = "Lucky Leaf",
+		ShortLabel = "Luck",
+		Description = "Every leaf has a small chance to pay 3-5x Coins.",
+		Currency = "Robux",
+		GamePassId = 1944114701,
+		-- 1 in 20 leaves (5%) hits the bonus -- LuckyMultiplierMin/Max is the RANGE that roll picks
+		-- from, applied on top of whatever that leaf was already worth (see RollLuckyBonus).
+		LuckyChance = 0.05,
+		LuckyMultiplierMin = 3,
+		LuckyMultiplierMax = 5,
+	},
+
+	-- The premium VIP tier -- bundles four purely-cosmetic perks (no gameplay/economy effect, unlike
+	-- DoubleGrab/LuckyLeaf) instead of one. Robux-only, same shape as the other two -- see
+	-- docs/GAMEPASS_SETUP.md for the real Game Pass this GamePassId points to (icon:
+	-- docs/gamepass-leaf-patron-icon.png). The three exclusive tool skins it unlocks aren't listed
+	-- here -- they're CosmeticConfig entries with `RequiresPerk = "LeafPatron"`, auto-granted/revoked
+	-- by PlayerUpgrades.GrantPerk/RemovePerk whenever this perk is granted/removed (see that file).
+	LeafPatron = {
+		Id = "LeafPatron",
+		Name = "Leaf Patron",
+		ShortLabel = "VIP",
+		Description = "Rainbow name, a gold Results banner, a neon footstep trail, and exclusive VIP tool skins.",
+		Currency = "Robux",
+		GamePassId = 1945372319,
+	},
 }

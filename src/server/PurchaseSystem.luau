@@ -45,6 +45,15 @@ local function purchaseItem(player, itemType, itemId)
 		return { success = false, reason = "That's not something Ruisu sells." }
 	end
 
+	-- VIP-exclusive cosmetics (CosmeticConfig.luau, `RequiresPerk`) aren't individually purchasable
+	-- at all -- they come free with the perk itself (see PlayerUpgrades.GrantPerk). Defense-in-depth
+	-- against a client calling this remote directly; the real client UI never offers a buy button for
+	-- one of these (see StorePanelUI.luau's "locked" row state).
+	if item.RequiresPerk then
+		local perk = PerkConfig[item.RequiresPerk]
+		return { success = false, reason = "That comes free with " .. (perk and perk.Name or "a perk") .. "." }
+	end
+
 	-- Robux-currency perks (see PerkConfig.luau) are bought through MarketplaceService's own
 	-- PromptGamePassPurchase, not this Coins-spending remote at all -- GamePassPerks.luau grants
 	-- them once Roblox confirms the purchase. Rejecting here is defense-in-depth against a client

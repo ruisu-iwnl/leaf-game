@@ -8,6 +8,7 @@ local PlayerConfig = require(ReplicatedStorage.Shared.PlayerConfig)
 local RoundConfig = require(ReplicatedStorage.Shared.RoundConfig)
 local LeafSpawner = require(script.Parent.LeafSpawner)
 local MoneySystem = require(script.Parent.MoneySystem)
+local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
 local SackSystem = require(script.Parent.SackSystem)
 
 -- Orchestrates the Lobby <-> map loop: Intermission (every map hidden in ServerStorage, everyone
@@ -309,6 +310,7 @@ local function buildResultsList()
 				Name = player.Name,
 				Count = roundContributions[player] or 0,
 				CoinDelta = roundCoinDeltas[player] or 0,
+				IsVIP = PlayerUpgrades.HasPerk(player, "LeafPatron"),
 			})
 		end
 	end

@@ -17,6 +17,13 @@ local UpgradeConfig = require(ReplicatedStorage.Shared.UpgradeConfig)
 
 local TOOL_CONFIGS = { LeafBlower = BlowerConfig, LeafRake = RakeConfig, LeafSack = SackConfig }
 
+-- Upgrades are grouped by which tool they target (UpgradeConfig.luau's own `Tool` field) and laid
+-- out as a per-tool card grid instead of one long single-column list -- with 13 upgrades now (up
+-- from the original 3), a flat list of full-width rows made the Upgrades section alone nearly as
+-- tall as the rest of the panel put together. See buildUpgradesSection/buildUpgradeCard below.
+local UPGRADE_TOOL_ORDER = { "LeafBlower", "LeafRake", "LeafSack" }
+local UPGRADE_TOOL_LABELS = { LeafBlower = "Blower", LeafRake = "Rake", LeafSack = "Sack" }
+
 -- Same distance/reasoning as NPCDialogueUI's own AUTO_CLOSE_DISTANCE -- a little past
 -- NPCInteraction's ProximityPrompt activation distance (10 studs), so walking away closes the
 -- panel only once you're genuinely out of range, not right at the boundary where the prompt itself
@@ -75,6 +82,15 @@ local PANEL_PADDING = 14
 local HEADER_HEIGHT = 30
 local ROW_HEIGHT = 64
 
+-- Upgrade card grid -- 2 columns, gap between cards baked into CellSize/CellPadding math (each
+-- cell is 50% width minus half the gap, with the gap itself added back as padding, so 2 cells +
+-- 1 gap exactly fill the container's width). CARD_HEIGHT is fixed across every card regardless of
+-- how short its description actually is -- sized for the longest description at the NARROWEST
+-- (mobile) column width, so every card in the grid stays visually uniform instead of a ragged mix
+-- of heights.
+local UPGRADE_CARD_GAP = 8
+local UPGRADE_CARD_HEIGHT = 118
+
 local function formatAmount(amount)
 	local text = tostring(math.floor(amount))
 	return text:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
@@ -106,6 +122,45 @@ end
 -- everything else is (it's a specific official symbol, not a simple shape) -- a green "R$" badge
 -- reads as "this costs real money" at a glance without needing an image asset, same spirit as every
 -- other icon in this game.
+-- Small gold pill reading "VIP" -- shown on a locked (not-yet-owned, RequiresPerk) cosmetic row
+-- instead of a price, same shape/size as buildCoinIcon/buildRobuxBadge's "icon + right-aligned
+-- label" pattern but round-badge-only (no separate holder icon), since "VIP" is short enough to sit
+-- inside the badge itself.
+local function buildVIPBadge(parent)
+	local badge = Instance.new("Frame")
+	badge.Name = "VIPBadge"
+	badge.AnchorPoint = Vector2.new(1, 0.5)
+	badge.Position = UDim2.new(1, -14, 0.5, 0)
+	badge.Size = UDim2.new(0, 52, 0, 24)
+	badge.BackgroundColor3 = Color3.fromRGB(90, 40, 135)
+	badge.BorderSizePixel = 0
+	badge.ZIndex = 13
+	badge.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = badge
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(212, 175, 55)
+	stroke.Transparency = 0.1
+	stroke.Thickness = 1.5
+	stroke.Parent = badge
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.Text = "VIP"
+	label.TextSize = 14
+	label.TextColor3 = Color3.fromRGB(212, 175, 55)
+	label.ZIndex = 13
+	label.Parent = badge
+
+	return badge
+end
+
 local function buildRobuxBadge(parent, size)
 	local badge = Instance.new("Frame")
 	badge.Name = "RobuxBadge"
@@ -311,10 +366,13 @@ local function buildItemRow(parent, layoutOrder, name, description, price, isOwn
 	return row
 end
 
--- Same visual shape as buildItemRow, but tri-state instead of owned/unowned: "unowned" shows a
+-- Same visual shape as buildItemRow, but with 4 states instead of owned/unowned: "unowned" shows a
 -- price (clicking buys it), "owned" shows an "Equip" prompt (clicking equips it, no confirm/spend
 -- involved), "equipped" shows a non-clickable "Equipped" badge -- the one state that's currently
--- active for that tool can't itself be clicked away, only replaced by picking a different row.
+-- active for that tool can't itself be clicked away, only replaced by picking a different row -- and
+-- "locked" (VIP-exclusive cosmetics not owned yet, see CosmeticConfig.luau's `RequiresPerk`) shows a
+-- gold "VIP" badge instead of a price; clicking one skips the normal buy flow entirely and opens the
+-- required perk's own Robux purchase prompt directly.
 local function buildCosmeticRow(parent, layoutOrder, name, description, price, state, onClick)
 	local clickable = state ~= "equipped"
 	local row = Instance.new(clickable and "TextButton" or "Frame")
@@ -403,6 +461,8 @@ local function buildCosmeticRow(parent, layoutOrder, name, description, price, s
 		equipLabel.TextColor3 = ACCENT_COLOR
 		equipLabel.ZIndex = 13
 		equipLabel.Parent = row
+	elseif state == "locked" then
+		buildVIPBadge(row)
 	else
 		local priceHolder = Instance.new("Frame")
 		priceHolder.Name = "Price"
@@ -480,6 +540,203 @@ local function buildSection(parent, layoutOrder, title)
 	rowsLayout.Parent = rows
 
 	return rows
+end
+
+-- Compact grid card for one upgrade -- same info as buildItemRow (name/description/price/owned)
+-- but stacked vertically (name, then description, then price/Owned) instead of side-by-side, since
+-- a grid cell is roughly half the width of a full-width row. Height is fixed (UPGRADE_CARD_HEIGHT)
+-- so every card in a UIGridLayout lines up evenly regardless of its own text length.
+local function buildUpgradeCard(parent, layoutOrder, name, description, price, isOwned, onBuy)
+	local card = Instance.new(isOwned and "Frame" or "TextButton")
+	card.Name = "Card" .. layoutOrder
+	card.LayoutOrder = layoutOrder
+	card.BackgroundColor3 = ROW_COLOR
+	card.BorderSizePixel = 0
+	card.ZIndex = 12
+	if not isOwned then
+		card.AutoButtonColor = false
+		card.Text = ""
+	end
+	card.Parent = parent
+
+	if not isOwned and onBuy then
+		card.MouseButton1Click:Connect(onBuy)
+		PanelMotion.AnimateButton(card)
+	end
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 14)
+	corner.Parent = card
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = ROW_STROKE
+	stroke.Transparency = isOwned and 0.1 or 0.45
+	stroke.Thickness = isOwned and 2 or 1.5
+	stroke.Parent = card
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "Name"
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Position = UDim2.new(0, 10, 0, 8)
+	nameLabel.Size = UDim2.new(1, -20, 0, 18)
+	nameLabel.Font = Enum.Font.FredokaOne
+	nameLabel.Text = name
+	nameLabel.TextSize = 14
+	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	nameLabel.ZIndex = 13
+	nameLabel.Parent = card
+
+	local descriptionLabel = Instance.new("TextLabel")
+	descriptionLabel.Name = "Description"
+	descriptionLabel.BackgroundTransparency = 1
+	descriptionLabel.Position = UDim2.new(0, 10, 0, 27)
+	descriptionLabel.Size = UDim2.new(1, -20, 0, 58)
+	descriptionLabel.Font = Enum.Font.FredokaOne
+	descriptionLabel.Text = description
+	descriptionLabel.TextSize = 12
+	descriptionLabel.TextWrapped = true
+	descriptionLabel.TextXAlignment = Enum.TextXAlignment.Left
+	descriptionLabel.TextYAlignment = Enum.TextYAlignment.Top
+	descriptionLabel.TextColor3 = DESCRIPTION_COLOR
+	descriptionLabel.ZIndex = 13
+	descriptionLabel.Parent = card
+
+	if isOwned then
+		local ownedLabel = Instance.new("TextLabel")
+		ownedLabel.Name = "Owned"
+		ownedLabel.Position = UDim2.new(0, 10, 1, -26)
+		ownedLabel.Size = UDim2.new(1, -20, 0, 18)
+		ownedLabel.BackgroundTransparency = 1
+		ownedLabel.Font = Enum.Font.FredokaOne
+		ownedLabel.Text = "Owned"
+		ownedLabel.TextSize = 14
+		ownedLabel.TextXAlignment = Enum.TextXAlignment.Left
+		ownedLabel.TextColor3 = OWNED_COLOR
+		ownedLabel.ZIndex = 13
+		ownedLabel.Parent = card
+	else
+		local priceHolder = Instance.new("Frame")
+		priceHolder.Name = "Price"
+		priceHolder.Position = UDim2.new(0, 10, 1, -26)
+		priceHolder.Size = UDim2.new(1, -20, 0, 18)
+		priceHolder.BackgroundTransparency = 1
+		priceHolder.ZIndex = 13
+		priceHolder.Parent = card
+
+		local priceLayout = Instance.new("UIListLayout")
+		priceLayout.FillDirection = Enum.FillDirection.Horizontal
+		priceLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		priceLayout.Padding = UDim.new(0, 5)
+		priceLayout.Parent = priceHolder
+
+		local coinIconHolder = Instance.new("Frame")
+		coinIconHolder.Name = "CoinIconHolder"
+		coinIconHolder.LayoutOrder = 1
+		coinIconHolder.Size = UDim2.new(0, 16, 0, 16)
+		coinIconHolder.BackgroundTransparency = 1
+		coinIconHolder.ZIndex = 13
+		coinIconHolder.Parent = priceHolder
+		buildCoinIcon(coinIconHolder, 16)
+
+		local priceLabel = Instance.new("TextLabel")
+		priceLabel.Name = "Amount"
+		priceLabel.LayoutOrder = 2
+		priceLabel.Size = UDim2.new(0, 0, 1, 0)
+		priceLabel.AutomaticSize = Enum.AutomaticSize.X
+		priceLabel.BackgroundTransparency = 1
+		priceLabel.Font = Enum.Font.FredokaOne
+		priceLabel.Text = formatAmount(price)
+		priceLabel.TextSize = 14
+		priceLabel.TextColor3 = Color3.new(1, 1, 1)
+		priceLabel.ZIndex = 13
+		priceLabel.Parent = priceHolder
+	end
+
+	return card
+end
+
+-- One tool's upgrade group within the Upgrades section -- a small sub-label ("Blower"/"Rake"/
+-- "Sack") followed by a responsive 2-column UIGridLayout of buildUpgradeCard cards. CellSize is
+-- Scale-based (half the container's width, minus half the gap) rather than a fixed pixel width, so
+-- it stays exactly 2 columns whether the panel is at its mobile floor or its desktop ceiling
+-- (PANEL_MIN_SIZE/PANEL_MAX_SIZE) -- CellPadding adds the gap back so 2 cells + 1 gap always sums
+-- to exactly the container's full width.
+local function buildUpgradeToolGroup(parent, layoutOrder, label)
+	local container = Instance.new("Frame")
+	container.Name = label .. "Group"
+	container.LayoutOrder = layoutOrder
+	container.BackgroundTransparency = 1
+	container.Size = UDim2.new(1, 0, 0, 0)
+	container.AutomaticSize = Enum.AutomaticSize.Y
+	container.ZIndex = 12
+	container.Parent = parent
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Vertical
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 4)
+	layout.Parent = container
+
+	local sublabel = Instance.new("TextLabel")
+	sublabel.Name = "SubLabel"
+	sublabel.LayoutOrder = 1
+	sublabel.BackgroundTransparency = 1
+	sublabel.Size = UDim2.new(1, 0, 0, 14)
+	sublabel.Font = Enum.Font.FredokaOne
+	sublabel.Text = label
+	sublabel.TextSize = 12
+	sublabel.TextXAlignment = Enum.TextXAlignment.Left
+	sublabel.TextColor3 = SECTION_LABEL_COLOR
+	sublabel.ZIndex = 12
+	sublabel.Parent = container
+
+	local grid = Instance.new("Frame")
+	grid.Name = "Grid"
+	grid.LayoutOrder = 2
+	grid.BackgroundTransparency = 1
+	grid.Size = UDim2.new(1, 0, 0, 0)
+	grid.AutomaticSize = Enum.AutomaticSize.Y
+	grid.ZIndex = 12
+	grid.Parent = container
+
+	local gridLayout = Instance.new("UIGridLayout")
+	gridLayout.CellSize = UDim2.new(0.5, -UPGRADE_CARD_GAP / 2, 0, UPGRADE_CARD_HEIGHT)
+	gridLayout.CellPadding = UDim2.new(0, UPGRADE_CARD_GAP, 0, UPGRADE_CARD_GAP)
+	gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	gridLayout.Parent = grid
+
+	return grid
+end
+
+-- The Upgrades section as a whole: the same "Upgrades" header every other section uses
+-- (buildSectionLabel), followed by one buildUpgradeToolGroup per tool in UPGRADE_TOOL_ORDER.
+-- Returns a Tool -> grid-container lookup so refresh() can rebuild each tool's cards independently.
+local function buildUpgradesSection(parent, layoutOrder)
+	local container = Instance.new("Frame")
+	container.Name = "UpgradesSection"
+	container.LayoutOrder = layoutOrder
+	container.BackgroundTransparency = 1
+	container.Size = UDim2.new(1, 0, 0, 0)
+	container.AutomaticSize = Enum.AutomaticSize.Y
+	container.ZIndex = 12
+	container.Parent = parent
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Vertical
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 10)
+	layout.Parent = container
+
+	buildSectionLabel(container, 1, "Upgrades")
+
+	local groups = {}
+	for i, tool in ipairs(UPGRADE_TOOL_ORDER) do
+		groups[tool] = buildUpgradeToolGroup(container, i + 1, UPGRADE_TOOL_LABELS[tool])
+	end
+
+	return groups
 end
 
 local function buildUI()
@@ -636,20 +893,20 @@ local function buildUI()
 	scrollLayout.Padding = UDim.new(0, 16)
 	scrollLayout.Parent = scroll
 
-	local upgradesRows = buildSection(scroll, 1, "Upgrades")
+	local upgradeGroups = buildUpgradesSection(scroll, 1)
 	local perksRows = buildSection(scroll, 2, "Perks")
 	local blowerSkinRows = buildSection(scroll, 3, "Blower Skins")
 	local rakeSkinRows = buildSection(scroll, 4, "Rake Skins")
 	local sackSkinRows = buildSection(scroll, 5, "Sack Skins")
 
 	screenGui.Parent = playerGui
-	return backdrop, panel, closeButton, coinsLabel, upgradesRows, perksRows,
+	return backdrop, panel, closeButton, coinsLabel, upgradeGroups, perksRows,
 		blowerSkinRows, rakeSkinRows, sackSkinRows
 end
 
 function StorePanelUI.Start()
 	local player = Players.LocalPlayer
-	local backdrop, panel, closeButton, coinsLabel, upgradesRows, perksRows,
+	local backdrop, panel, closeButton, coinsLabel, upgradeGroups, perksRows,
 		blowerSkinRows, rakeSkinRows, sackSkinRows = buildUI()
 	local motion = PanelMotion.new(panel, backdrop)
 
@@ -668,12 +925,23 @@ function StorePanelUI.Start()
 	local promptRobuxPurchase
 
 	-- Sorted once at Start() (catalogs don't change at runtime) so row order stays stable across
-	-- refreshes instead of shuffling with Lua's unspecified pairs() order.
-	local upgradeIds = {}
-	for id in pairs(UpgradeConfig) do
-		table.insert(upgradeIds, id)
+	-- refreshes instead of shuffling with Lua's unspecified pairs() order. Grouped by Tool (not one
+	-- flat list) to match the per-tool card grid buildUpgradesSection built -- cheapest first within
+	-- each tool, ties broken by name, so the grid reads as a real price ladder instead of an
+	-- arbitrary id-alphabetical order.
+	local upgradeIdsByTool = { LeafBlower = {}, LeafRake = {}, LeafSack = {} }
+	for id, upgrade in pairs(UpgradeConfig) do
+		table.insert(upgradeIdsByTool[upgrade.Tool], id)
 	end
-	table.sort(upgradeIds)
+	for _, ids in pairs(upgradeIdsByTool) do
+		table.sort(ids, function(a, b)
+			local upgradeA, upgradeB = UpgradeConfig[a], UpgradeConfig[b]
+			if upgradeA.Price == upgradeB.Price then
+				return upgradeA.Name < upgradeB.Name
+			end
+			return upgradeA.Price < upgradeB.Price
+		end)
+	end
 
 	local perkIds = {}
 	for id in pairs(PerkConfig) do
@@ -711,9 +979,20 @@ function StorePanelUI.Start()
 		for i, id in ipairs(cosmeticIdsByTool[toolName]) do
 			local cosmetic = CosmeticConfig[id]
 			local owned = player:GetAttribute("CosmeticOwned_" .. id) == true
-			local state = equippedId == id and "equipped" or (owned and "owned" or "unowned")
+			local state
+			if equippedId == id then
+				state = "equipped"
+			elseif owned then
+				state = "owned"
+			elseif cosmetic.RequiresPerk then
+				state = "locked"
+			else
+				state = "unowned"
+			end
 			buildCosmeticRow(rows, i + 1, cosmetic.Name, cosmetic.Description, cosmetic.Price, state, function()
-				if state == "unowned" then
+				if state == "locked" then
+					promptRobuxPurchase(PerkConfig[cosmetic.RequiresPerk])
+				elseif state == "unowned" then
 					previewCosmetic(toolName, id, cosmetic)
 				else
 					attemptEquip(toolName, id)
@@ -725,20 +1004,23 @@ function StorePanelUI.Start()
 	local function refresh()
 		coinsLabel.Text = formatAmount(coins.Value)
 
-		-- GuiObject, not Frame -- unowned rows are TextButtons now (clickable), which aren't a
+		-- GuiObject, not Frame -- unowned cards are TextButtons now (clickable), which aren't a
 		-- Frame subclass; GuiObject is the common ancestor of both while still excluding the
-		-- UIListLayout instance that also lives in this same container.
-		for _, child in ipairs(upgradesRows:GetChildren()) do
-			if child:IsA("GuiObject") then
-				child:Destroy()
+		-- UIGridLayout instance that also lives in this same container.
+		for _, tool in ipairs(UPGRADE_TOOL_ORDER) do
+			local grid = upgradeGroups[tool]
+			for _, child in ipairs(grid:GetChildren()) do
+				if child:IsA("GuiObject") then
+					child:Destroy()
+				end
 			end
-		end
-		for i, id in ipairs(upgradeIds) do
-			local upgrade = UpgradeConfig[id]
-			local isOwned = player:GetAttribute("Upgrade_" .. id) == true
-			buildItemRow(upgradesRows, i, upgrade.Name, upgrade.Description, upgrade.Price, isOwned, function()
-				attemptPurchase("Upgrade", id, upgrade)
-			end)
+			for i, id in ipairs(upgradeIdsByTool[tool]) do
+				local upgrade = UpgradeConfig[id]
+				local isOwned = player:GetAttribute("Upgrade_" .. id) == true
+				buildUpgradeCard(grid, i, upgrade.Name, upgrade.Description, upgrade.Price, isOwned, function()
+					attemptPurchase("Upgrade", id, upgrade)
+				end)
+			end
 		end
 
 		for _, child in ipairs(perksRows:GetChildren()) do

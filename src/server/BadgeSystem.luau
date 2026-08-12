@@ -158,6 +158,12 @@ function BadgeSystem.CheckOwnershipMilestones(player)
 	if PlayerUpgrades.HasPerk(player, "DoubleGrab") then
 		award(player, "TwoXGrabber")
 	end
+	if PlayerUpgrades.HasPerk(player, "LuckyLeaf") then
+		award(player, "LuckyLeafOwner")
+	end
+	if PlayerUpgrades.HasPerk(player, "LeafPatron") then
+		award(player, "LeafPatronOwner")
+	end
 end
 
 -- Both categories at once -- used by SaveSystem right after a full restore (so a player who already

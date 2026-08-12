@@ -19,6 +19,11 @@ return {
 			GripColor = Color3.fromRGB(35, 40, 35),
 			NozzleColor = Color3.fromRGB(55, 60, 55),
 		},
+		BlowerPatron = {
+			BodyColor = Color3.fromRGB(90, 40, 135),
+			GripColor = Color3.fromRGB(20, 20, 26),
+			NozzleColor = Color3.fromRGB(212, 175, 55),
+		},
 	},
 
 	BodySize = Vector3.new(0.9, 0.9, 2.2),

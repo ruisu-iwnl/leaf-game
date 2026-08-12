@@ -79,15 +79,60 @@ function PlayerUpgrades.HasPerk(player, id)
 	return player:GetAttribute(perkAttribute(id)) == true
 end
 
+-- Cosmetics that come bundled free with a perk (e.g. Leaf Patron's 3 exclusive tool skins --
+-- CosmeticConfig.luau, `RequiresPerk` field) instead of being individually purchasable. Scanned
+-- fresh rather than hardcoded so a future perk can bundle its own exclusive cosmetics just by
+-- setting RequiresPerk on a CosmeticConfig entry -- no changes needed here.
+local function bundledCosmeticIdsForPerk(perkId)
+	local ids = {}
+	for id, cosmetic in pairs(CosmeticConfig) do
+		if cosmetic.RequiresPerk == perkId then
+			table.insert(ids, id)
+		end
+	end
+	return ids
+end
+
 function PlayerUpgrades.GrantPerk(player, id)
 	if not PerkConfig[id] then
 		return
 	end
 	player:SetAttribute(perkAttribute(id), true)
+	for _, cosmeticId in ipairs(bundledCosmeticIdsForPerk(id)) do
+		PlayerUpgrades.GrantCosmetic(player, cosmeticId)
+	end
 end
 
+-- Doesn't unequip/refresh a currently-worn bundled cosmetic if the perk is revoked while it's
+-- equipped -- same known simplification as :removecosmetic's own admin-only edge case (see that
+-- command), not worth the extra plumbing for something that only happens via an admin command or a
+-- Game Pass ownership desync.
 function PlayerUpgrades.RemovePerk(player, id)
 	player:SetAttribute(perkAttribute(id), nil)
+	for _, cosmeticId in ipairs(bundledCosmeticIdsForPerk(id)) do
+		PlayerUpgrades.RemoveCosmetic(player, cosmeticId)
+	end
+end
+
+-- Leaf Patron's two client-facing preferences (SettingsUI.luau) -- whether the perk's visible
+-- effects (nameplate + trail) render at all, and what color the footstep trail uses ("Rainbow", the
+-- default animated cycle, or a "#RRGGBB" hex string picked via VIPColorPickerUI.luau). Plain player
+-- Attributes, same as everything else in this file -- they replicate automatically, which is exactly
+-- what VIPEffects.luau needs since every OTHER client also has to see them, not just the owner's own.
+function PlayerUpgrades.IsVIPEffectsEnabled(player)
+	return player:GetAttribute("VIPEffectsEnabled") ~= false
+end
+
+function PlayerUpgrades.SetVIPEffectsEnabled(player, enabled)
+	player:SetAttribute("VIPEffectsEnabled", enabled)
+end
+
+function PlayerUpgrades.GetVIPTrailColor(player)
+	return player:GetAttribute("VIPTrailColor") or "Rainbow"
+end
+
+function PlayerUpgrades.SetVIPTrailColor(player, colorValue)
+	player:SetAttribute("VIPTrailColor", colorValue)
 end
 
 function PlayerUpgrades.GetCosmetic(player, toolName)
@@ -162,6 +207,30 @@ function PlayerUpgrades.GetCoinsMultiplier(player)
 		end
 	end
 	return multiplier
+end
+
+-- The Lucky Leaf perk's actual roll -- called once per delivery from init.server.luau's
+-- LeafSpawner.OnLeafDelivered listener, right alongside GetCoinsMultiplier (the same one place the
+-- whole coins-per-leaf formula lives). Rolls INDEPENDENTLY for each of the `count` leaves in this
+-- delivery, not once for the whole batch -- a big sack drop-off (dozens/hundreds of leaves at once)
+-- should get proportionally more shots at the bonus than a single blown-in leaf does, not the same
+-- flat 5% either way. `perLeafCoins` is what ONE leaf is already worth (MoneyConfig.CoinsPerLeaf *
+-- GetCoinsMultiplier) -- the returned bonus is just the EXTRA on top of that, so it stacks with 2X
+-- Grab automatically (a lucky leaf's bonus is a multiple of the already-doubled rate, not the base
+-- rate) without this function needing to know 2X Grab exists at all.
+function PlayerUpgrades.RollLuckyBonus(player, perLeafCoins, count)
+	if perLeafCoins <= 0 or count <= 0 or not PlayerUpgrades.HasPerk(player, "LuckyLeaf") then
+		return 0
+	end
+	local perk = PerkConfig.LuckyLeaf
+	local bonus = 0
+	for _ = 1, count do
+		if math.random() < perk.LuckyChance then
+			local multiplier = perk.LuckyMultiplierMin + math.random() * (perk.LuckyMultiplierMax - perk.LuckyMultiplierMin)
+			bonus += perLeafCoins * (multiplier - 1)
+		end
+	end
+	return bonus
 end
 
 -- The next three are for SaveSystem -- enumerating what to persist without it needing to know

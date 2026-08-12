@@ -14,9 +14,10 @@ local SackSystem = require(script.Parent.SackSystem)
 -- Persists Coins, the per-player lifetime LeavesCleaned count, SackStorage (leaves currently held
 -- in the sack UI, not yet turned into a physical sack), every physical sack currently in the
 -- player's Backpack/equipped (as a leaf-count list -- see SackSystem.GetPlayerSackLeafCounts/
--- RestoreSacks), and owned upgrades/perks/cosmetics (see PlayerUpgrades.luau) across sessions.
--- Areas and season progress will get added here once those systems exist to have something to
--- save -- nothing to persist for them yet.
+-- RestoreSacks), owned upgrades/perks/cosmetics, and the Leaf Patron perk's own two cosmetic
+-- preferences (effects on/off, trail color -- see PlayerUpgrades.luau) across sessions. Areas and
+-- season progress will get added here once those systems exist to have something to save -- nothing
+-- to persist for them yet.
 --
 -- ActiveSackCount itself is still NOT stored as a raw number -- it's derived by RestoreSacks
 -- incrementing it once per sack it actually rebuilds, so it can never drift from the real physical
@@ -114,6 +115,17 @@ local function loadPlayerData(player)
 		end
 	end
 
+	-- Leaf Patron's two cosmetic preferences (see PlayerUpgrades.luau) -- harmless to restore even
+	-- for a player who doesn't currently own the perk, same as restoring a Cosmetics entry for a
+	-- tool skin they might not own anymore; PlayerUpgrades/VIPEffects.luau only ever act on these
+	-- once HasPerk("LeafPatron") is also true.
+	if typeof(result.VIPEffectsEnabled) == "boolean" then
+		PlayerUpgrades.SetVIPEffectsEnabled(player, result.VIPEffectsEnabled)
+	end
+	if typeof(result.VIPTrailColor) == "string" then
+		PlayerUpgrades.SetVIPTrailColor(player, result.VIPTrailColor)
+	end
+
 	-- Re-applies the now-restored cosmetics to whatever's already in the world for this player.
 	-- Without this, a rejoining player's ALWAYS-WORN Blower backpack prop could permanently end up
 	-- on the wrong skin: BlowerTool's attachBackpack resolves + bakes in colors once, the very first
@@ -147,6 +159,8 @@ local function savePlayerData(player)
 		PerkIds = PlayerUpgrades.GetOwnedPerkIds(player),
 		CosmeticIds = PlayerUpgrades.GetOwnedCosmeticIds(player),
 		Cosmetics = PlayerUpgrades.GetCosmetics(player),
+		VIPEffectsEnabled = PlayerUpgrades.IsVIPEffectsEnabled(player),
+		VIPTrailColor = PlayerUpgrades.GetVIPTrailColor(player),
 	}
 	local ok, err = pcall(function()
 		playerData:SetAsync(keyFor(player), data)

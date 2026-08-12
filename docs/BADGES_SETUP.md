@@ -1,4 +1,4 @@
-# Setting up the 22 Badges
+# Setting up the 24 Badges
 
 Like Game Passes, Roblox Badges can only be created through the website/Creator Dashboard -- there's
 no API for it, so this is the one manual step. Everything else (awarding, the popup notification,
@@ -120,6 +120,14 @@ Same requirement as Game Passes -- Badges belong to a published place.
   - Icon: `docs/badges/TwoXGrabber.png`
   - Name: `2X Grabber`
   - Description: `Own the 2X Grab perk.`
+- [ ] **Lucky Leaf**
+  - Icon: `docs/badges/LuckyLeaf.png`
+  - Name: `Lucky Leaf`
+  - Description: `Own the Lucky Leaf perk.`
+- [ ] **Leaf Patron**
+  - Icon: `docs/badges/LeafPatronOwner.png`
+  - Name: `Leaf Patron`
+  - Description: `Own the Leaf Patron VIP perk.`
 
 ## 3. Copy each Badge Id
 

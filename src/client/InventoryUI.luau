@@ -5,6 +5,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local PanelMotion = require(script.Parent.PanelMotion)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
+local PerkIcons = require(script.Parent.PerkIcons)
 local ToolIcons = require(script.Parent.ToolIcons)
 local UILayout = require(script.Parent.UILayout)
 
@@ -241,9 +242,10 @@ local function buildSlotCard(parent, layoutOrder, size, tool)
 end
 
 -- Same visual language as an empty/filled item slot (buildSlotCard) -- outlined box, filled + gold
--- "active" stroke when owned -- but perks aren't Tool instances with a real 3D model to build an
--- icon from, so this just centers the perk's compact ShortLabel text instead. Not clickable --
--- nothing to toggle, a perk is just always-on once owned.
+-- "active" stroke when owned. Perks aren't Tool instances with a real 3D model, but some still get
+-- a real built icon (PerkIcons.Builders, same ZIndex-100-above-the-card convention as ToolIcons) --
+-- anything without one just falls back to its compact ShortLabel text, same as every perk did
+-- before PerkIcons existed. Not clickable -- nothing to toggle, a perk is just always-on once owned.
 local function buildPerkSlotCard(parent, layoutOrder, size, perk)
 	local card = Instance.new("Frame")
 	card.Name = "PerkSlot" .. layoutOrder
@@ -278,7 +280,12 @@ local function buildPerkSlotCard(parent, layoutOrder, size, perk)
 		stroke.Color = EQUIPPED_STROKE
 		stroke.Transparency = 0.1
 		stroke.Thickness = 2
-		label.Text = perk.ShortLabel or perk.Name
+		local iconBuilder = PerkIcons.Builders[perk.Id]
+		if iconBuilder then
+			iconBuilder(card)
+		else
+			label.Text = perk.ShortLabel or perk.Name
+		end
 	else
 		card.BackgroundColor3 = EMPTY_CARD_COLOR
 		card.BackgroundTransparency = 0.35

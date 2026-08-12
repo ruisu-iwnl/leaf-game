@@ -56,4 +56,32 @@ return {
 		Price = 10000,
 		Tool = "LeafSack",
 	},
+
+	-- VIP-exclusive skins, one per tool -- not for sale through PurchaseSystem at all (no `Price`;
+	-- see that module's explicit RequiresPerk guard). Auto-granted/revoked by
+	-- PlayerUpgrades.GrantPerk/RemovePerk the instant the Leaf Patron perk itself is granted/revoked
+	-- (see that file) -- owning the Game Pass IS owning these, nothing extra to buy. StorePanelUI
+	-- shows them as a locked "VIP" row (instead of a price) for anyone who doesn't have the perk yet;
+	-- clicking one opens the Leaf Patron purchase prompt directly.
+	BlowerPatron = {
+		Id = "BlowerPatron",
+		Name = "Patron Blower",
+		Description = "A royal purple-and-gold blower, exclusive to Leaf Patron members.",
+		Tool = "LeafBlower",
+		RequiresPerk = "LeafPatron",
+	},
+	RakePatron = {
+		Id = "RakePatron",
+		Name = "Patron Rake",
+		Description = "A royal purple-and-gold rake, exclusive to Leaf Patron members.",
+		Tool = "LeafRake",
+		RequiresPerk = "LeafPatron",
+	},
+	SackPatron = {
+		Id = "SackPatron",
+		Name = "Patron Sack",
+		Description = "A royal purple-and-gold sack, exclusive to Leaf Patron members.",
+		Tool = "LeafSack",
+		RequiresPerk = "LeafPatron",
+	},
 }

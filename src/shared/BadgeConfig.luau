@@ -171,4 +171,18 @@ return {
 		Tier = "Silver",
 		BadgeId = 0,
 	},
+	LuckyLeafOwner = {
+		Id = "LuckyLeafOwner",
+		Name = "Lucky Leaf",
+		Description = "Own the Lucky Leaf perk.",
+		Tier = "Silver",
+		BadgeId = 0,
+	},
+	LeafPatronOwner = {
+		Id = "LeafPatronOwner",
+		Name = "Leaf Patron",
+		Description = "Own the Leaf Patron VIP perk.",
+		Tier = "Gold",
+		BadgeId = 0,
+	},
 }

@@ -18,6 +18,11 @@ return {
 			GripColor = Color3.fromRGB(30, 28, 26),
 			HeadColor = Color3.fromRGB(35, 35, 38),
 		},
+		RakePatron = {
+			HandleColor = Color3.fromRGB(90, 40, 135),
+			GripColor = Color3.fromRGB(20, 20, 26),
+			HeadColor = Color3.fromRGB(212, 175, 55),
+		},
 	},
 
 	-- Long pole (like a standard real-world rake) and a wider head/tine spread than the first pass.

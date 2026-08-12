@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#3a2214"/>
+  <circle cx="256" cy="256" r="200" fill="#E8B44A" stroke="#ffeed2" stroke-width="14"/>
+  <circle cx="256" cy="256" r="168" fill="none" stroke="#B8862E" stroke-width="6" opacity="0.6"/>
+
+  <!-- crown glyph: a gold band with 3 spikes (center tallest), each topped with a small royal
+       purple jewel, matching the Leaf Patron perk's own purple+gold palette -->
+  <rect x="196" y="286" width="120" height="30" rx="6" fill="#2a1810"/>
+  <polygon points="176,286 336,286 316,190 256,240 196,190" fill="#2a1810"/>
+  <circle cx="196" cy="190" r="14" fill="#8a3ccf"/>
+  <circle cx="256" cy="176" r="16" fill="#8a3ccf"/>
+  <circle cx="316" cy="190" r="14" fill="#8a3ccf"/>
+
+  <g transform="translate(120,120) rotate(-20)">
+    <path d="M0 0 C 30 -10, 55 10, 60 45 C 25 45, -5 30, 0 0 Z" fill="#c1502a"/>
+  </g>
+  <g transform="translate(392,392) rotate(160)">
+    <path d="M0 0 C 30 -10, 55 10, 60 45 C 25 45, -5 30, 0 0 Z" fill="#c1502a"/>
+  </g>
+</svg>
