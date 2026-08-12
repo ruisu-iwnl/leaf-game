@@ -4,7 +4,7 @@ local UserInputService = game:GetService("UserInputService")
 local PanelMotion = require(script.Parent.PanelMotion)
 local ToolIcons = require(script.Parent.ToolIcons)
 
--- The tutorial content Ruisu-the-guide's "Show me!" choice opens (see GuideDialogueUI.luau) --
+-- The tutorial content Ruisu-the-guide's "Show me!" choice opens (see NPCDialogues.luau) --
 -- a static, scrollable explainer covering tools, the cleanup zone, and the shop -- not tied to live
 -- game state the way StorePanelUI is, so this never needs to refresh/rebuild its content on open.
 --

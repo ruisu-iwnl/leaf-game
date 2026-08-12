@@ -542,10 +542,17 @@ local function onCollectLeaf(player, leaf)
 		return
 	end
 
-	if LeafSpawner.CollectLeaf(leaf) then
+	local collected, zone = LeafSpawner.CollectLeaf(leaf)
+	if collected then
 		player:SetAttribute("SackStorage", storage + 1)
 		playGesture(character, pickupAnimation, pickupTracks)
-		DailyQuestSystem.RecordProgress(player, "CollectViaSack", 1)
+		-- Yard-only: the Lobby's own always-on decorative leaves are otherwise just as
+		-- click-collectible as a real round's, which would let this daily be farmed without ever
+		-- joining a round -- inconsistent with DeliverLeaves/CompleteRounds, which both require
+		-- genuine round participation.
+		if zone == "Yard" then
+			DailyQuestSystem.RecordProgress(player, "CollectViaSack", 1)
+		end
 	end
 end
 

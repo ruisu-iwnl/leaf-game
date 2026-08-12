@@ -8,7 +8,7 @@ local NPCConfig = require(ReplicatedStorage.Shared.NPCConfig)
 -- in Studio -- see CLAUDE.md's Store System entry, the one part of this feature that genuinely
 -- can't be automated away) and tells the client which dialogue to open via the shared
 -- OpenNPCDialogue remote. What that dialogue actually says/does lives client-side, in
--- StoreDialogueUI.luau -- this module never needs to know or change if that content does.
+-- NPCDialogues.luau -- this module never needs to know or change if that content does.
 --
 -- All identity (Workspace instance name, dialogue/registry id, display name) comes from
 -- NPCConfig.luau -- the one place to touch if the rig ever gets renamed/replaced again.

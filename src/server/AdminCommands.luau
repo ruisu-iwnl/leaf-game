@@ -291,7 +291,7 @@ end
 -- Clears a player's quest state and immediately restarts it (via QuestSystem.ResetQuest, not
 -- PlayerQuests.ResetQuest directly) so its content -- including the "Quest Started" toast, if that
 -- quest announces one -- can be re-tested live, without a fresh account or rejoin. E.g.
--- ":resetquest me Tutorial" makes QuestPathUI's guiding path/GuideDialogueUI's dialogue treat it as
+-- ":resetquest me Tutorial" makes QuestPathUI's guiding path/NPCDialogues' guide dialogue treat it as
 -- never having been done. ":resetquest me all" resets every quest in QuestConfig at once (today
 -- that's just the one, but this stays useful as more get added).
 commands.resetquest = function(admin, args)

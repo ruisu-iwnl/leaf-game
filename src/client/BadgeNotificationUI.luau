@@ -5,7 +5,7 @@ local ToastNotificationUI = require(script.Parent.ToastNotificationUI)
 
 -- Badges' own thin content on top of the shared ToastNotificationUI shell -- fired by the server
 -- (BadgeSystem.luau) whenever a real Roblox Badge actually gets awarded. Same "generic system, thin
--- per-feature wrapper" shape as StoreDialogueUI.luau sitting on top of NPCDialogueUI.luau -- this
+-- per-feature wrapper" shape as NPCDialogues.luau sitting on top of NPCDialogueUI.luau -- this
 -- file owns nothing about the toast's look/animation, only what a badge notification specifically
 -- says (tier color, glyph, text).
 local BadgeNotificationUI = {}

@@ -18,9 +18,11 @@ local SackSystem = require(script.Parent.SackSystem)
 -- in the sack UI, not yet turned into a physical sack), every physical sack currently in the
 -- player's Backpack/equipped (as a leaf-count list -- see SackSystem.GetPlayerSackLeafCounts/
 -- RestoreSacks), owned upgrades/perks/cosmetics, the Leaf Patron perk's own two cosmetic
--- preferences (effects on/off, trail color -- see PlayerUpgrades.luau), and completed quest ids
--- (see PlayerQuests.luau) across sessions. Areas and season progress will get added here once those
--- systems exist to have something to save -- nothing to persist for them yet.
+-- preferences (effects on/off, trail color -- see PlayerUpgrades.luau), completed quest ids (see
+-- PlayerQuests.luau), and today's daily-quest progress/completion (see DailyQuestSystem.luau --
+-- without this, rejoining mid-day would let a player re-earn an already-completed daily's reward)
+-- across sessions. Areas and season progress will get added here once those systems exist to have
+-- something to save -- nothing to persist for them yet.
 --
 -- ActiveSackCount itself is still NOT stored as a raw number -- it's derived by RestoreSacks
 -- incrementing it once per sack it actually rebuilds, so it can never drift from the real physical
@@ -183,6 +185,7 @@ local function savePlayerData(player)
 		VIPEffectsEnabled = PlayerUpgrades.IsVIPEffectsEnabled(player),
 		VIPTrailColor = PlayerUpgrades.GetVIPTrailColor(player),
 		CompletedQuestIds = PlayerQuests.GetCompletedQuestIds(player),
+		DailyQuests = DailyQuestSystem.GetSaveData(player),
 	}
 	local ok, err = pcall(function()
 		playerData:SetAsync(keyFor(player), data)

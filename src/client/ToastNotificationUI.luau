@@ -5,8 +5,9 @@ local TweenService = game:GetService("TweenService")
 -- via ToastNotificationUI.Show({ tierColor, glyph, eyebrow, title, description, duration? }),
 -- instead of every feature (badges now, whatever else later) rebuilding its own card/animation/
 -- queue from scratch. Same "one shared system, thin per-feature wrappers" shape as
--- NPCDialogueUI.luau (generic dialogue box) + StoreDialogueUI.luau (Ruisu's thin content on top of
--- it) elsewhere in this project. BadgeNotificationUI.luau is this module's only current caller.
+-- NPCDialogueUI.luau (generic dialogue box) + NPCDialogues.luau (every NPC's thin content on top
+-- of it) elsewhere in this project. BadgeNotificationUI.luau/QuestNotificationUI.luau are this
+-- module's current callers.
 --
 -- Deliberately its own bespoke animation rather than reusing PanelMotion -- PanelMotion is built
 -- around a backdrop+panel MODAL pair (dims/blocks the world behind it), which is wrong for a toast

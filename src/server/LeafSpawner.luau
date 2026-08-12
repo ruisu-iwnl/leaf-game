@@ -292,6 +292,10 @@ end
 -- cleanup zone) -- only resting leaves are collectible this way, and only ones not already
 -- mid-glide, matching the same guard ApplyBlow uses. Returns false (does nothing) if the leaf
 -- wasn't a valid, currently-resting leaf, so callers can't be tricked into double-counting one.
+-- Second return value is the leaf's own zone ("Yard" or "Lobby") -- callers that need to
+-- distinguish a real round-map collection from a purely decorative Lobby one (e.g.
+-- SackSystem.onCollectLeaf gating the CollectViaSack daily quest) can check it without this module
+-- needing to know anything about quests.
 function LeafSpawner.CollectLeaf(leaf)
 	local rest = restingLeaves[leaf]
 	if not rest or rest.disturbing then
@@ -308,7 +312,7 @@ function LeafSpawner.CollectLeaf(leaf)
 	end)
 	tween:Play()
 
-	return true
+	return true, rest.zone
 end
 
 -- If a glide's straight-line path would pass through solid geometry (a wall, fence, tree trunk),

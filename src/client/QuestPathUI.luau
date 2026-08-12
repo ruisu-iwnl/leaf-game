@@ -51,8 +51,8 @@ local GUIDE_NPC = NPCConfig.Guide
 local MAX_DISTANCE = 200
 local RIG_RESYNC_INTERVAL_SECONDS = 2
 
-local ARROW_COUNT = 20
-local ARROW_CYCLE_SECONDS = 2.4 -- how long one arrow takes to travel the full path
+local ARROW_COUNT = 15
+local ARROW_CYCLE_SECONDS = 8 -- how long one arrow takes to travel the full path (was 2.4 -- too fast)
 local ARROW_HOVER_HEIGHT = 0.7 -- just above the ground/leaf litter -- was 3 (roughly head height),
 	-- which read as floating disconnected from the path itself rather than a trail leading somewhere
 local ARROW_COLOR = Color3.fromRGB(255, 205, 60)

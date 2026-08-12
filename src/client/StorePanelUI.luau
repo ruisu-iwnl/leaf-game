@@ -41,7 +41,7 @@ local function findRigRootPart(rig)
 		or rig:FindFirstChildWhichIsA("BasePart", true)
 end
 
--- The actual shop window Ruisu's "Yes" opens (see StoreDialogueUI.luau). Shows every upgrade/perk/
+-- The actual shop window Ruisu's "Yes" opens (see NPCDialogues.luau). Shows every upgrade/perk/
 -- cosmetic from the real catalogs (UpgradeConfig.luau/PerkConfig.luau/CosmeticConfig.luau -- the
 -- same tables PlayerUpgrades.luau already reads server-side, so there's nothing to keep in sync by
 -- hand) with its price and whether the player currently owns it. Unowned rows are clickable: buying

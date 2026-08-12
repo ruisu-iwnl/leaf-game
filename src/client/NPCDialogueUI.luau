@@ -11,9 +11,10 @@ local PanelMotion = require(script.Parent.PanelMotion)
 -- exactly one deliberately-tuned way, see buildPortraitInto), name + typewriter text on the right,
 -- and a row of choice buttons in the bottom-right corner.
 --
--- Built ONCE and reused for every NPC -- an NPC-specific module (e.g. StoreDialogueUI.luau) never
--- builds any UI itself; it just calls NPCDialogueUI.Register(npcId, config) once at startup with
--- its own question/choices/click behavior. The server-side interaction (see NPCInteraction.luau)
+-- Built ONCE and reused for every NPC -- content (see NPCDialogues.luau, which registers every
+-- NPC's conversation in one module) never builds any UI itself; it just calls
+-- NPCDialogueUI.Register(npcId, config) once at startup with its own question/choices/click
+-- behavior. The server-side interaction (see NPCInteraction.luau)
 -- fires ONE shared OpenNPCDialogue remote with just the npcId string -- the lookup happens
 -- entirely client-side, so nothing but a plain string ever needs to cross the network. Every
 -- design choice (box size, colors, portrait angle/zoom, typing speed, button animation) lives in

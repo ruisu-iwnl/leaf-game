@@ -1,7 +1,7 @@
 -- Registry of interactable NPCs (Store rig, and any future ones) -- the single place that maps an
 -- NPC's identity to the Workspace instance it's actually placed as. Keeping RigName separate from
 -- DisplayName/Id means renaming the object in Studio (or reskinning which character plays a given
--- role) never means hunting through NPCInteraction/StoreDialogueUI/StorePanelUI for hardcoded
+-- role) never means hunting through NPCInteraction/NPCDialogues/StorePanelUI for hardcoded
 -- strings again -- change it here once.
 --
 -- Id: internal identifier used for the OpenNPCDialogue remote + NPCDialogueUI's registry key.

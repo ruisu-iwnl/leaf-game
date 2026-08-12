@@ -186,22 +186,45 @@ local function buildQuestRow(parent, layoutOrder, quest, status, progressText)
 	descLabel.ZIndex = 13
 	descLabel.Parent = row
 
-	local statusBadge = Instance.new("TextLabel")
+	-- A separate pill (background Frame) + label (text) pair, not one TextLabel doing both --
+	-- FredokaOne's glyphs don't sit centered within their own reported text bounds (same issue
+	-- ToastNotificationUI.luau's medal glyph has, see its own comment on why), and a single-piece
+	-- TextLabel had no room to compensate for that while also guaranteeing "Not Started"/"In
+	-- Progress" actually fit the pill's width. TextScaled + a UITextSizeConstraint ceiling fixes
+	-- both at once: the label always centers on the pill's true geometric center, and shrinks
+	-- instead of overflowing if the pill's too narrow for its text.
+	local statusBadge = Instance.new("Frame")
 	statusBadge.Name = "Status"
 	statusBadge.AnchorPoint = Vector2.new(1, 0)
 	statusBadge.Position = UDim2.new(1, -10, 0, 8)
 	statusBadge.Size = UDim2.new(0, 88, 0, 22)
 	statusBadge.BackgroundColor3 = STATUS_COLORS[status]
-	statusBadge.Font = Enum.Font.FredokaOne
-	statusBadge.Text = STATUS_LABELS[status]
-	statusBadge.TextSize = 11
-	statusBadge.TextColor3 = Color3.new(1, 1, 1)
+	statusBadge.BorderSizePixel = 0
 	statusBadge.ZIndex = 13
 	statusBadge.Parent = row
 
 	local badgeCorner = Instance.new("UICorner")
 	badgeCorner.CornerRadius = UDim.new(1, 0)
 	badgeCorner.Parent = statusBadge
+
+	local statusLabel = Instance.new("TextLabel")
+	statusLabel.Name = "Label"
+	statusLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	statusLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
+	statusLabel.Size = UDim2.new(1, -12, 1, -4)
+	statusLabel.BackgroundTransparency = 1
+	statusLabel.Font = Enum.Font.FredokaOne
+	statusLabel.Text = STATUS_LABELS[status]
+	statusLabel.TextScaled = true
+	statusLabel.TextColor3 = Color3.new(1, 1, 1)
+	statusLabel.TextXAlignment = Enum.TextXAlignment.Center
+	statusLabel.TextYAlignment = Enum.TextYAlignment.Center
+	statusLabel.ZIndex = 14
+	statusLabel.Parent = statusBadge
+
+	local statusLabelConstraint = Instance.new("UITextSizeConstraint")
+	statusLabelConstraint.MaxTextSize = 11
+	statusLabelConstraint.Parent = statusLabel
 
 	local rewardCoins = quest.Reward and quest.Reward.Coins
 	if rewardCoins and rewardCoins > 0 then
