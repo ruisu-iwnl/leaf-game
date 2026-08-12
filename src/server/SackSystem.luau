@@ -4,6 +4,7 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
+local DailyQuestSystem = require(script.Parent.DailyQuestSystem)
 local LeafSpawner = require(script.Parent.LeafSpawner)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
 
@@ -544,6 +545,7 @@ local function onCollectLeaf(player, leaf)
 	if LeafSpawner.CollectLeaf(leaf) then
 		player:SetAttribute("SackStorage", storage + 1)
 		playGesture(character, pickupAnimation, pickupTracks)
+		DailyQuestSystem.RecordProgress(player, "CollectViaSack", 1)
 	end
 end
 

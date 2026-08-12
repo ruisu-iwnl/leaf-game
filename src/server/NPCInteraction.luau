@@ -38,7 +38,10 @@ end
 
 -- Finds `rigName` anywhere under Workspace (waits up to 10s in case it's still streaming in) and
 -- attaches a ProximityPrompt to its root part. `onTriggered(player)` fires on interaction.
-function NPCInteraction.RegisterTalkPrompt(rigName, promptText, onTriggered)
+-- `displayText` is what the prompt shows as its subtitle (defaults to `rigName`) -- kept separate
+-- since the Workspace instance's name (used for the lookup) doesn't have to match what the NPC is
+-- actually called in-game.
+function NPCInteraction.RegisterTalkPrompt(rigName, promptText, onTriggered, displayText)
 	local rig = waitForRig(rigName, 10)
 	if not rig then
 		warn(string.format(
@@ -57,7 +60,7 @@ function NPCInteraction.RegisterTalkPrompt(rigName, promptText, onTriggered)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "TalkPrompt"
 	prompt.ActionText = promptText or "Talk"
-	prompt.ObjectText = rigName
+	prompt.ObjectText = displayText or rigName
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = PROMPT_ACTIVATION_DISTANCE
 	prompt.RequiresLineOfSight = false

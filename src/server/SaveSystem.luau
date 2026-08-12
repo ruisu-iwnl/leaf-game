@@ -4,9 +4,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BadgeSystem = require(script.Parent.BadgeSystem)
 local BlowerTool = require(script.Parent.BlowerTool)
+local DailyQuestSystem = require(script.Parent.DailyQuestSystem)
 local LeavesCleanedStat = require(script.Parent.LeavesCleanedStat)
 local MoneySystem = require(script.Parent.MoneySystem)
+local PlayerQuests = require(script.Parent.PlayerQuests)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
+local QuestSystem = require(script.Parent.QuestSystem)
 local RakeTool = require(script.Parent.RakeTool)
 local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
 local SackSystem = require(script.Parent.SackSystem)
@@ -14,10 +17,10 @@ local SackSystem = require(script.Parent.SackSystem)
 -- Persists Coins, the per-player lifetime LeavesCleaned count, SackStorage (leaves currently held
 -- in the sack UI, not yet turned into a physical sack), every physical sack currently in the
 -- player's Backpack/equipped (as a leaf-count list -- see SackSystem.GetPlayerSackLeafCounts/
--- RestoreSacks), owned upgrades/perks/cosmetics, and the Leaf Patron perk's own two cosmetic
--- preferences (effects on/off, trail color -- see PlayerUpgrades.luau) across sessions. Areas and
--- season progress will get added here once those systems exist to have something to save -- nothing
--- to persist for them yet.
+-- RestoreSacks), owned upgrades/perks/cosmetics, the Leaf Patron perk's own two cosmetic
+-- preferences (effects on/off, trail color -- see PlayerUpgrades.luau), and completed quest ids
+-- (see PlayerQuests.luau) across sessions. Areas and season progress will get added here once those
+-- systems exist to have something to save -- nothing to persist for them yet.
 --
 -- ActiveSackCount itself is still NOT stored as a raw number -- it's derived by RestoreSacks
 -- incrementing it once per sack it actually rebuilds, so it can never drift from the real physical
@@ -49,8 +52,14 @@ local function keyFor(player)
 end
 
 local function loadPlayerData(player)
+	-- Every early-return path below routes through QuestSystem.StartEligibleQuests instead of a
+	-- bare `return` -- quest-starting must happen for EVERY player, not just ones with real save
+	-- data restored, or the Tutorial would never auto-start at all for a brand-new player, or for
+	-- anyone in an unpublished/no-DataStore-access Studio session (see this file's own top comment
+	-- on why that's a real, common case here, not just a theoretical one). Return value is unused by
+	-- every caller of loadPlayerData, so this is safe.
 	if not playerData then
-		return
+		return QuestSystem.StartEligibleQuests(player)
 	end
 
 	local ok, result = pcall(function()
@@ -62,11 +71,11 @@ local function loadPlayerData(player)
 			"[Save] failed to load data for %s: %s (check Studio Access to API Services, and that this place has been published)",
 			player.Name, tostring(result)
 		))
-		return
+		return QuestSystem.StartEligibleQuests(player)
 	end
 
 	if not result then
-		return -- brand new player, nothing saved yet
+		return QuestSystem.StartEligibleQuests(player) -- brand new player, nothing saved yet
 	end
 
 	-- GetAsync above already yielded on a real network call, so MoneySystem's/LeavesCleanedStat's
@@ -126,6 +135,18 @@ local function loadPlayerData(player)
 		PlayerUpgrades.SetVIPTrailColor(player, result.VIPTrailColor)
 	end
 
+	if typeof(result.CompletedQuestIds) == "table" then
+		for _, id in ipairs(result.CompletedQuestIds) do
+			PlayerQuests.CompleteQuest(player, id)
+		end
+	end
+	QuestSystem.StartEligibleQuests(player)
+
+	-- Without this, a player could rejoin mid-day and re-earn an already-completed daily's Coins
+	-- reward a second time, since DailyQuestSystem's progress/completion otherwise lives only in
+	-- per-session Attributes. RestoreSaveData discards anything that isn't still relevant to TODAY.
+	DailyQuestSystem.RestoreSaveData(player, result.DailyQuests)
+
 	-- Re-applies the now-restored cosmetics to whatever's already in the world for this player.
 	-- Without this, a rejoining player's ALWAYS-WORN Blower backpack prop could permanently end up
 	-- on the wrong skin: BlowerTool's attachBackpack resolves + bakes in colors once, the very first
@@ -161,6 +182,7 @@ local function savePlayerData(player)
 		Cosmetics = PlayerUpgrades.GetCosmetics(player),
 		VIPEffectsEnabled = PlayerUpgrades.IsVIPEffectsEnabled(player),
 		VIPTrailColor = PlayerUpgrades.GetVIPTrailColor(player),
+		CompletedQuestIds = PlayerQuests.GetCompletedQuestIds(player),
 	}
 	local ok, err = pcall(function()
 		playerData:SetAsync(keyFor(player), data)

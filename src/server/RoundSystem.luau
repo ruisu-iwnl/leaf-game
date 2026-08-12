@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 local MapConfig = require(ReplicatedStorage.Shared.MapConfig)
 local PlayerConfig = require(ReplicatedStorage.Shared.PlayerConfig)
 local RoundConfig = require(ReplicatedStorage.Shared.RoundConfig)
+local DailyQuestSystem = require(script.Parent.DailyQuestSystem)
 local LeafSpawner = require(script.Parent.LeafSpawner)
 local MoneySystem = require(script.Parent.MoneySystem)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
@@ -658,6 +659,17 @@ local function beginRound()
 	-- the ~0.5s gap between the loop's last poll and here could in principle push it a hair past 1.
 	local finalProgress = math.min(Workspace:GetAttribute("CleanupZoneProgress") or 0, 1)
 	applyResultsRewards(endReason, finalProgress)
+
+	-- Counts toward the "CompleteRounds" daily quest -- participation only, regardless of
+	-- goal/timer outcome (same "showing up counts" spirit as the rest of this round's rewards not
+	-- requiring a win). Filtered to still-connected participants, same check as
+	-- anyParticipantStillConnected above -- a participant who disconnected mid-round has no Player
+	-- instance left to set an Attribute on.
+	for _, participant in ipairs(participants) do
+		if participant.Parent == Players then
+			DailyQuestSystem.RecordProgress(participant, "CompleteRounds", 1)
+		end
+	end
 
 	-- Stop the round's mechanics the instant it's over, not after the whole Results phase -- leaves
 	-- stop spawning and existing ones are cleared, and SackSystem drops its cleanup-zone reference,

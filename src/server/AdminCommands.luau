@@ -10,6 +10,8 @@ local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
 local MoneySystem = require(script.Parent.MoneySystem)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
+local QuestConfig = require(ReplicatedStorage.Shared.QuestConfig)
+local QuestSystem = require(script.Parent.QuestSystem)
 local RoundSystem = require(script.Parent.RoundSystem)
 local SackSystem = require(script.Parent.SackSystem)
 local UpgradeConfig = require(ReplicatedStorage.Shared.UpgradeConfig)
@@ -284,6 +286,35 @@ commands.testbadge = function(admin, args)
 	end
 	BadgeSystem.FireNotification(target, id)
 	print(string.format("[Admin] %s test-fired the %s badge popup for %s", admin.Name, id, target.Name))
+end
+
+-- Clears a player's quest state and immediately restarts it (via QuestSystem.ResetQuest, not
+-- PlayerQuests.ResetQuest directly) so its content -- including the "Quest Started" toast, if that
+-- quest announces one -- can be re-tested live, without a fresh account or rejoin. E.g.
+-- ":resetquest me Tutorial" makes QuestPathUI's guiding path/GuideDialogueUI's dialogue treat it as
+-- never having been done. ":resetquest me all" resets every quest in QuestConfig at once (today
+-- that's just the one, but this stays useful as more get added).
+commands.resetquest = function(admin, args)
+	local target = resolveTarget(admin, args[1])
+	if not target then
+		return
+	end
+
+	if args[2] and args[2]:lower() == "all" then
+		for id in pairs(QuestConfig) do
+			QuestSystem.ResetQuest(target, id)
+		end
+		print(string.format("[Admin] %s reset all of %s's quests", admin.Name, target.Name))
+		return
+	end
+
+	local id = findCatalogId(QuestConfig, args[2])
+	if not id then
+		warn(string.format("[Admin] usage: :resetquest <player|me> <id|all>. Known ids: %s", catalogIdList(QuestConfig)))
+		return
+	end
+	QuestSystem.ResetQuest(target, id)
+	print(string.format("[Admin] %s reset %s's %s quest", admin.Name, target.Name, id))
 end
 
 -- Skips straight to Results without waiting out the rest of RoundDurationSeconds, as if the timer

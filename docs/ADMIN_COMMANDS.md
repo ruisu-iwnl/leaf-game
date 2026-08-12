@@ -79,9 +79,36 @@ full list of 10 badges, their criteria, and how to create the real Roblox Badges
 - `:testbadge` only fires the client-side popup notification, no BadgeService call at all -- safe to
   run repeatedly to preview the animation, even before the real Badge has been created.
 
+## Quests
+
+`:resetquest <player|me> <id|all>`
+
+Clears a player's quest state (both "started" and "completed") and immediately restarts it -- not
+just a silent flag reset. If the quest announces a "Quest Started" toast
+(`QuestConfig.<id>.AnnounceStart` isn't `false`), that toast fires again too, so this reproduces the
+full live flow a real fresh start would give, not just next-rejoin behavior.
+
+| Id | Name | Notes |
+|---|---|---|
+| `Tutorial` | Getting Started | Given by the Lobby's "Ruisu" guide rig. Resetting brings back `QuestPathUI`'s guiding path live, in the same session. Its own "Quest Started" toast is suppressed by design (`AnnounceStart = false`) -- only "Quest Completed" (+200 Coins) ever shows for this one. |
+
+`all` resets every quest in `QuestConfig` at once (today that's just `Tutorial`, but stays useful as
+more get added). See `CLAUDE.md`'s Quest System section for the full Started/Completed/reward
+lifecycle this routes through (`QuestSystem.ResetQuest`, not `PlayerQuests.ResetQuest` directly).
+
+## Rounds
+
+`:finishround`
+
+Force-ends the current round immediately, as if the timer had just expired (counts as a Timer end,
+not a Goal one), skipping straight to Results -- for testing the Active -> Results -> Intermission
+tail of the round loop without sitting through a full round. No target player (affects the whole
+server's round). Only works during an `Active` round; warns and no-ops otherwise.
+
 ## Notes
 
 - Ids are matched case-insensitively; an unknown id prints the full list of valid ids for that
   catalog back to Output.
-- Catalogs live in `src/shared/UpgradeConfig.luau`, `PerkConfig.luau`, `CosmeticConfig.luau`, and
-  `BadgeConfig.luau` -- this table should be kept in sync whenever those change.
+- Catalogs live in `src/shared/UpgradeConfig.luau`, `PerkConfig.luau`, `CosmeticConfig.luau`,
+  `BadgeConfig.luau`, and `QuestConfig.luau` -- this table should be kept in sync whenever those
+  change.

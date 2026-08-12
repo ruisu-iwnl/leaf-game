@@ -8,12 +8,15 @@ local Workspace = game:GetService("Workspace")
 local BlowerConfig = require(ReplicatedStorage.Shared.BlowerConfig)
 local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
 local ItemPreviewUI = require(script.Parent.ItemPreviewUI)
+local NPCConfig = require(ReplicatedStorage.Shared.NPCConfig)
 local NPCDialogueUI = require(script.Parent.NPCDialogueUI)
 local PanelMotion = require(script.Parent.PanelMotion)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
 local RakeConfig = require(ReplicatedStorage.Shared.RakeConfig)
 local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
 local UpgradeConfig = require(ReplicatedStorage.Shared.UpgradeConfig)
+
+local STORE_NPC = NPCConfig.Store
 
 local TOOL_CONFIGS = { LeafBlower = BlowerConfig, LeafRake = RakeConfig, LeafSack = SackConfig }
 
@@ -1085,8 +1088,8 @@ function StorePanelUI.Start()
 	attemptPurchase = function(itemType, itemId, item)
 		closePanel()
 		NPCDialogueUI.Show({
-			rigName = "Ruisu",
-			displayName = "Ruisu",
+			rigName = STORE_NPC.RigName,
+			displayName = STORE_NPC.DisplayName,
 			question = string.format("Buy %s for %d Coins?", item.Name, item.Price),
 			choices = {
 				{
@@ -1120,8 +1123,8 @@ function StorePanelUI.Start()
 	-- SayAndClose, which only changes the text/closes a box some earlier Show already opened).
 	local function showRuisuMessage(text, duration)
 		NPCDialogueUI.Show({
-			rigName = "Ruisu",
-			displayName = "Ruisu",
+			rigName = STORE_NPC.RigName,
+			displayName = STORE_NPC.DisplayName,
 			question = text,
 			choices = {},
 		})
@@ -1242,7 +1245,7 @@ function StorePanelUI.Start()
 			proximityConn:Disconnect()
 			proximityConn = nil
 		end
-		local rig = Workspace:FindFirstChild("Ruisu", true) -- recursive, rig may be nested (see CLAUDE.md)
+		local rig = Workspace:FindFirstChild(STORE_NPC.RigName, true) -- recursive; rig may be nested (see CLAUDE.md)
 		local rigRoot = rig and findRigRootPart(rig)
 		if rigRoot then
 			proximityConn = RunService.Heartbeat:Connect(function()
