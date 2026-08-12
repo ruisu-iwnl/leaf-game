@@ -112,6 +112,21 @@ not a Goal one), skipping straight to Results -- for testing the Active -> Resul
 tail of the round loop without sitting through a full round. No target player (affects the whole
 server's round). Only works during an `Active` round; warns and no-ops otherwise.
 
+## Leaves
+
+`:goldenleaf <percent|reset>`
+
+Overrides the Golden Leaf spawn chance (`LeafConfig.luau`'s `GoldenLeafChance`, normally ~1.5%) for
+every Yard leaf spawned from that point on, without editing `LeafConfig.luau` itself. `percent` is
+0-100 (e.g. `:goldenleaf 100` makes every newly-spawned leaf golden); `:goldenleaf reset` (or
+`default`) goes back to the normal rare chance. No target player -- global, since there's only one
+server-side spawn loop. Running it with no argument prints the current chance to Output instead of
+changing anything. Already-spawned leaves are unaffected either way (the roll only happens at spawn
+time); only leaves the spawn loops create AFTER the command runs are affected.
+
+:goldenleaf 100
+:goldenleaf reset
+
 ## Notes
 
 - Ids are matched case-insensitively; an unknown id prints the full list of valid ids for that

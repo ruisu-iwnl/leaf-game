@@ -7,6 +7,7 @@ local AdminConfig = require(ReplicatedStorage.Shared.AdminConfig)
 local BadgeConfig = require(ReplicatedStorage.Shared.BadgeConfig)
 local BadgeSystem = require(script.Parent.BadgeSystem)
 local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
+local LeafSpawner = require(script.Parent.LeafSpawner)
 local MoneySystem = require(script.Parent.MoneySystem)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
@@ -330,6 +331,38 @@ commands.finishround = function(admin)
 	else
 		warn("[Admin] :finishround only works during an Active round")
 	end
+end
+
+-- Overrides every Yard leaf's Golden Leaf roll (LeafConfig.luau's normal 1.5%) for testing, without
+-- touching LeafConfig.luau itself -- see LeafSpawner.SetGoldenLeafChanceOverride's own comment for
+-- why. ":goldenleaf 100" (percent, not a 0-1 fraction, since "100" reads far more naturally as a
+-- command argument than "1") makes every newly-spawned Yard leaf golden; ":goldenleaf reset" (or
+-- "default") goes back to the normal rare chance. Global, not per-player -- there's only one
+-- server-side spawn loop, so this affects every connected player's leaves at once.
+commands.goldenleaf = function(admin, args)
+	local arg = args[1] and args[1]:lower()
+	if not arg then
+		warn(string.format(
+			"[Admin] usage: :goldenleaf <percent|reset>. Currently: %.1f%%",
+			LeafSpawner.GetGoldenLeafChance() * 100
+		))
+		return
+	end
+
+	if arg == "reset" or arg == "default" then
+		LeafSpawner.SetGoldenLeafChanceOverride(nil)
+		print(string.format("[Admin] %s reset the Golden Leaf chance to its default", admin.Name))
+		return
+	end
+
+	local percent = tonumber(arg)
+	if not percent then
+		warn("[Admin] usage: :goldenleaf <percent|reset>, e.g. \":goldenleaf 100\"")
+		return
+	end
+	local chance = math.clamp(percent, 0, 100) / 100
+	LeafSpawner.SetGoldenLeafChanceOverride(chance)
+	print(string.format("[Admin] %s set the Golden Leaf chance to %.1f%%", admin.Name, chance * 100))
 end
 
 -- Shared by both the RemoteEvent path and the (bonus, possibly-inert) chat listeners below.

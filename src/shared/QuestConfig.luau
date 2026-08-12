@@ -16,7 +16,10 @@
 --   Name/Description   player-facing text -- shown in QuestNotificationUI's toasts and
 --                       QuestLogUI's panel. For an Objectives quest, Description is just the short
 --                       framing line -- each objective carries its own line (see below).
---   GiverNPC           key into NPCConfig.luau -- who hands out/represents this quest.
+--   GiverNPC           optional key into NPCConfig.luau -- who hands out/represents this quest. Omit
+--                       entirely for a quest nothing narratively hands out (e.g. a long-term/lifetime
+--                       goal) -- QuestLogUI then shows "Quest Giver: None (always available)," same as
+--                       a daily.
 --   RequiresQuest       optional prerequisite quest id -- QuestSystem.StartEligibleQuests won't
 --                       start this quest until PlayerQuests.HasCompleted(player, RequiresQuest) is
 --                       true, and it's re-checked (live, no rejoin needed) the instant the
@@ -97,5 +100,40 @@ return {
 			{ Id = "BuyUpgrade", Description = "Buy any upgrade from the shop.", Type = "BuyUpgrade", Target = 1 },
 		},
 		Reward = { Coins = 500 },
+	},
+
+	-- Long-term goals: unlike the Getting Started chain above, these are NOT gated behind a
+	-- RequiresQuest (no prerequisite -- QuestSystem.StartEligibleQuests starts both for every player
+	-- immediately, alongside Tutorial) and deliberately have no GiverNPC -- nothing narratively
+	-- "hands out" a lifetime grind goal, so QuestLogUI shows them the same "Quest Giver: None (always
+	-- available)" way it shows dailies. Both reuse EXISTING objective types (no new
+	-- QuestObjectives.RecordProgress call sites needed for LeafLegend -- "DeliverLeaves" is already
+	-- fed by init.server.luau's LeafSpawner.OnLeafDelivered hook), so a returning/veteran player who
+	-- already has thousands of leaves delivered from BEFORE this quest existed still starts these at
+	-- 0 progress -- QuestObjectives has no retroactive credit mechanism, a known simplification (same
+	-- kind BadgeSystem.CheckAll's retroactive-award pass deliberately avoids needing here, since these
+	-- track from a fresh Attribute, not a derived stat like LeavesCleaned).
+	LeafLegend = {
+		Id = "LeafLegend",
+		Name = "Leaf Legend",
+		Description = "A long-term goal for the truly dedicated -- keep blowing, raking, and delivering.",
+		Objectives = {
+			{ Id = "DeliverLeaves", Description = "Deliver 10,000 leaves to any Cleanup Zone.", Type = "DeliverLeaves", Target = 10000 },
+		},
+		Reward = { Coins = 10000 },
+	},
+
+	-- Reuses "CompleteRounds" -- until now only ever fed to DailyQuestSystem (RoundSystem.luau's
+	-- beginRound). Needed one new QuestObjectives.RecordProgress call right next to that existing
+	-- DailyQuestSystem one, same "both systems fed by the same call site" pattern GettingStarted2's
+	-- DeliverLeaves/CollectViaSack objectives already established.
+	RoundVeteran = {
+		Id = "RoundVeteran",
+		Name = "Round Veteran",
+		Description = "A long-term goal for the truly dedicated -- keep showing up, round after round.",
+		Objectives = {
+			{ Id = "CompleteRounds", Description = "Finish 25 rounds, any outcome.", Type = "CompleteRounds", Target = 25 },
+		},
+		Reward = { Coins = 8000 },
 	},
 }

@@ -6,6 +6,7 @@ local BlowerTool = require(script.BlowerTool)
 local DailyQuestSystem = require(script.DailyQuestSystem)
 local DayNightCycle = require(script.DayNightCycle)
 local GamePassPerks = require(script.GamePassPerks)
+local HallOfFameSystem = require(script.HallOfFameSystem)
 local LeafSpawner = require(script.LeafSpawner)
 local LeavesCleanedStat = require(script.LeavesCleanedStat)
 local MoneyConfig = require(ReplicatedStorage.Shared.MoneyConfig)
@@ -30,6 +31,7 @@ SackSystem.Start()
 PlayerSetup.Start()
 MoneySystem.Start()
 LeavesCleanedStat.Start()
+HallOfFameSystem.Start()
 PlayerUpgrades.Start()
 BadgeSystem.Start()
 -- QuestSystem must be started before SaveSystem: SaveSystem.Start() spawns loadPlayerData, which can
@@ -57,9 +59,14 @@ AdminCommands.Start()
 -- RollLuckyBonus (the Lucky Leaf perk) is the one exception that ISN'T a flat multiplier -- it's a
 -- per-leaf random roll, so it needs `count` threaded through separately rather than folding into
 -- GetCoinsMultiplier's plain numeric product.
-LeafSpawner.OnLeafDelivered(function(player, count)
+-- bonusCoins (new): a flat, pre-multiplier amount on top of the normal count-based payout -- today
+-- only ever set by LeafSpawner.consumeLeaf for a Golden Leaf (see LeafConfig.luau). Scaled by the
+-- SAME GetCoinsMultiplier every other leaf already gets here, so a Golden Leaf's bonus is just as
+-- affected by DoubleGrab etc. as the rest of a delivery -- no separate multiplier logic needed.
+LeafSpawner.OnLeafDelivered(function(player, count, bonusCoins)
 	local perLeafCoins = MoneyConfig.CoinsPerLeaf * PlayerUpgrades.GetCoinsMultiplier(player)
-	local coins = count * perLeafCoins + PlayerUpgrades.RollLuckyBonus(player, perLeafCoins, count)
+	local goldenBonus = (bonusCoins or 0) * PlayerUpgrades.GetCoinsMultiplier(player)
+	local coins = count * perLeafCoins + PlayerUpgrades.RollLuckyBonus(player, perLeafCoins, count) + goldenBonus
 	MoneySystem.AddCoins(player, coins)
 	RoundSystem.RecordCoinsEarned(player, coins)
 	LeavesCleanedStat.Add(player, count)

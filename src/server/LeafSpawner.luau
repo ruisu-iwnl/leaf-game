@@ -46,6 +46,11 @@ local lobbyCleanupZone
 local consumeVFXPart
 local consumeEmitter
 local consumeFlashEmitter
+-- nil = use LeafConfig.GoldenLeafChance normally. Set by the :goldenleaf admin command
+-- (AdminCommands.luau) for testing -- e.g. 1 makes every Yard leaf spawn golden, without touching
+-- LeafConfig.luau itself (which every other system also reads, so mutating it directly at runtime
+-- would be an easy way to leave a debug value baked in by accident).
+local goldenLeafChanceOverride = nil
 local leavesCleanedCount = 0
 local zoneCycleCount = 0
 -- Set fresh each round by StartYardRound(map1, mapEntry), from that map's own MapConfig entry --
@@ -67,18 +72,34 @@ local deliveryListeners = {}
 -- in, footstep-nudged in, or a sack drop-off) -- kept as a plain callback list rather than
 -- requiring MoneySystem directly, so this module still doesn't need to know Coins/players exist as
 -- a concept, just that "someone" may be listening. Only truly unattributable deliveries (no player
--- anywhere in the causal chain) skip this.
-local function notifyDelivery(player, count)
+-- anywhere in the causal chain) skip this. `bonusCoins` (optional, defaults to 0) is a flat
+-- pre-multiplier amount on top of the normal count-based payout -- today only ever set by
+-- consumeLeaf, for a Golden Leaf (see LeafConfig.luau's own comment).
+local function notifyDelivery(player, count, bonusCoins)
 	if not player then
 		return
 	end
 	for _, callback in ipairs(deliveryListeners) do
-		callback(player, count)
+		callback(player, count, bonusCoins or 0)
 	end
 end
 
 function LeafSpawner.OnLeafDelivered(callback)
 	table.insert(deliveryListeners, callback)
+end
+
+-- Testing hook for :goldenleaf (AdminCommands.luau). `chance` is a plain 0-1 fraction applied to
+-- every Yard leaf spawned from this point on (already-spawned leaves are unaffected either way,
+-- same as any other spawn-time roll) -- pass nil to reset back to LeafConfig.GoldenLeafChance's
+-- normal value. Kept as a runtime override rather than mutating LeafConfig.luau directly, since
+-- that table is shared/read by other systems too -- a debug value written straight into it would be
+-- easy to accidentally leave baked in.
+function LeafSpawner.SetGoldenLeafChanceOverride(chance)
+	goldenLeafChanceOverride = chance
+end
+
+function LeafSpawner.GetGoldenLeafChance()
+	return goldenLeafChanceOverride or LeafConfig.GoldenLeafChance
 end
 
 -- Each map's own MapConfig entry now owns its AvoidRegions (set into yardAvoidRegions by
@@ -176,18 +197,36 @@ local function randomLobbyRestPosition()
 	return Vector3.new(center.X + spawnClearRadius + 5, y, center.Z)
 end
 
-local function createLeaf(restPosition)
+-- `zone` ("Yard" or "Lobby") gates the Golden Leaf roll below -- Yard-only, since the Lobby isn't
+-- part of the Coins economy at all (see consumeLobbyLeaf) and a golden Lobby leaf would promise a
+-- bonus that can never actually pay out.
+local function createLeaf(restPosition, zone)
 	local leaf = Instance.new("Part")
 	leaf.Name = "Leaf"
 	leaf.Anchored = true
 	leaf.CanCollide = false
 	leaf.CastShadow = false
 	leaf.Size = LeafConfig.LeafSize
-	leaf.Color = LeafConfig.Colors[math.random(1, #LeafConfig.Colors)]
-	leaf.Material = Enum.Material.Grass
 	leaf.TopSurface = Enum.SurfaceType.Smooth
 	leaf.BottomSurface = Enum.SurfaceType.Smooth
 	leaf.CFrame = CFrame.new(restPosition)
+
+	-- A REAL leaf variant, not a client-side illusion -- Color/Material are genuine Instance
+	-- properties, so this replicates to every connected player automatically, the exact same way an
+	-- ordinary leaf's color already does, with zero extra work in LeafRenderer.luau. IsGolden
+	-- (Attribute, also free replication) is what consumeLeaf reads at delivery time to award the
+	-- bonus -- see LeafConfig.luau's own comment for why hand-collecting one into a Sack doesn't
+	-- (SackSystem's storage is a plain leaf COUNT, no per-leaf identity survives that).
+	local goldenChance = goldenLeafChanceOverride or LeafConfig.GoldenLeafChance
+	if zone == "Yard" and math.random() < goldenChance then
+		leaf.Color = LeafConfig.GoldenLeafColor
+		leaf.Material = Enum.Material.Neon
+		leaf:SetAttribute("IsGolden", true)
+	else
+		leaf.Color = LeafConfig.Colors[math.random(1, #LeafConfig.Colors)]
+		leaf.Material = Enum.Material.Grass
+	end
+
 	return leaf
 end
 
@@ -240,12 +279,16 @@ end
 -- the shared LeavesCleaned count -- exposed as a Workspace attribute for later steps (UI, rewards)
 -- to read without this module needing to know about players/coins yet.
 local function consumeLeaf(leaf, x, y, z, player)
+	local isGolden = leaf:GetAttribute("IsGolden") == true
 	restingLeaves[leaf] = nil
 	playConsumeVFX(Vector3.new(x, y, z))
 	leavesCleanedCount += 1
 	Workspace:SetAttribute("LeavesCleaned", leavesCleanedCount)
 	registerZoneProgress(1)
-	notifyDelivery(player, 1)
+	-- No notification/toast for a Golden Leaf -- deliberately silent, per explicit feedback that a
+	-- popup for this felt like overkill. The glow itself (see createLeaf) is the only "you found
+	-- one" signal; the bonus Coins just land in the balance the same way any other delivery's do.
+	notifyDelivery(player, 1, isGolden and LeafConfig.GoldenLeafBonusCoins or 0)
 	leaf:Destroy()
 end
 
@@ -743,7 +786,7 @@ local function runFallingSpawnLoop()
 			)
 			for _ = 1, math.max(toSpawn, 0) do
 				local restPosition = randomRestPosition()
-				local leaf = createLeaf(restPosition)
+				local leaf = createLeaf(restPosition, "Yard")
 				leaf.Parent = fallingFolder
 				beginFall(leaf, restPosition, "Yard")
 				totalSpawned += 1
@@ -770,7 +813,7 @@ local function spawnGroundCluster()
 		stackHeight += LeafConfig.GroundStackHeightMin + math.random() * (LeafConfig.GroundStackHeightMax - LeafConfig.GroundStackHeightMin)
 		local restPosition = Vector3.new(x, center.Y + stackHeight, z)
 
-		local leaf = createLeaf(restPosition)
+		local leaf = createLeaf(restPosition, "Yard")
 		local yaw = math.rad(math.random(0, 360))
 		leaf.CFrame = CFrame.new(restPosition) * CFrame.Angles(0, yaw, 0)
 		leaf.Parent = groundFolder
@@ -819,7 +862,7 @@ local function runLobbyFallingSpawnLoop()
 			)
 			for _ = 1, math.max(toSpawn, 0) do
 				local restPosition = randomLobbyRestPosition()
-				local leaf = createLeaf(restPosition)
+				local leaf = createLeaf(restPosition, "Lobby")
 				leaf.Parent = fallingFolder
 				beginFall(leaf, restPosition, "Lobby")
 				totalSpawned += 1
@@ -842,7 +885,7 @@ local function spawnLobbyGroundCluster()
 		stackHeight += LeafConfig.GroundStackHeightMin + math.random() * (LeafConfig.GroundStackHeightMax - LeafConfig.GroundStackHeightMin)
 		local restPosition = Vector3.new(x, center.Y + stackHeight, z)
 
-		local leaf = createLeaf(restPosition)
+		local leaf = createLeaf(restPosition, "Lobby")
 		local yaw = math.rad(math.random(0, 360))
 		leaf.CFrame = CFrame.new(restPosition) * CFrame.Angles(0, yaw, 0)
 		leaf.Parent = groundFolder

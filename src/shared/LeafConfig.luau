@@ -128,6 +128,19 @@ return {
 		Color3.fromRGB(120, 84, 40),
 	},
 
+	-- Golden Leaf: a rare bonus-coin leaf variant, rolled once per leaf at spawn (LeafSpawner.luau's
+	-- createLeaf, Yard-only -- see that function's own comment for why never in the Lobby). A REAL
+	-- leaf, not a client-side illusion -- Color/Material are genuine Instance properties, so every
+	-- connected player sees the same glowing leaf the instant it spawns, same as any other leaf's
+	-- color, with zero extra replication work. Only pays out via a direct cleanup-zone delivery
+	-- (consumeLeaf) -- hand-collecting one into a Sack still works fine, just without the bonus (see
+	-- createLeaf's own comment for why that's an acceptable scope boundary, not a bug).
+	GoldenLeafChance = 0.015, -- ~1 in 67 leaves
+	GoldenLeafBonusCoins = 50, -- flat, BEFORE the player's own Coins multiplier (DoubleGrab etc.) --
+		-- see init.server.luau's OnLeafDelivered, which applies that multiplier to this same way it
+		-- already does for every other leaf.
+	GoldenLeafColor = Color3.fromRGB(255, 208, 60),
+
 	-- Note: the cleanup zone used to have a blanket avoid-region here too, blocking leaves from
 	-- ever being placed/pushed there at all. Removed -- the whole point of the blower is to be
 	-- able to blow leaves INTO the cleanup zone. The fence posts themselves are still respected
