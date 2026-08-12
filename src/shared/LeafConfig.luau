@@ -135,7 +135,10 @@ return {
 	-- color, with zero extra replication work. Only pays out via a direct cleanup-zone delivery
 	-- (consumeLeaf) -- hand-collecting one into a Sack still works fine, just without the bonus (see
 	-- createLeaf's own comment for why that's an acceptable scope boundary, not a bug).
-	GoldenLeafChance = 0.015, -- ~1 in 67 leaves
+	-- 0.15% -- tuned so a map's whole leaf budget (5,000-13,000, see MapConfig.luau's per-map
+	-- FallingLeafCount+GroundLeafCount) yields roughly 10-20 Golden Leaves total, not 75-195 (the
+	-- old 1.5% badly overshot "rare" at this leaf-count scale).
+	GoldenLeafChance = 0.0015, -- ~1 in 667 leaves
 	GoldenLeafBonusCoins = 50, -- flat, BEFORE the player's own Coins multiplier (DoubleGrab etc.) --
 		-- see init.server.luau's OnLeafDelivered, which applies that multiplier to this same way it
 		-- already does for every other leaf.

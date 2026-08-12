@@ -116,7 +116,7 @@ server's round). Only works during an `Active` round; warns and no-ops otherwise
 
 `:goldenleaf <percent|reset>`
 
-Overrides the Golden Leaf spawn chance (`LeafConfig.luau`'s `GoldenLeafChance`, normally ~1.5%) for
+Overrides the Golden Leaf spawn chance (`LeafConfig.luau`'s `GoldenLeafChance`, normally ~0.15%) for
 every Yard leaf spawned from that point on, without editing `LeafConfig.luau` itself. `percent` is
 0-100 (e.g. `:goldenleaf 100` makes every newly-spawned leaf golden); `:goldenleaf reset` (or
 `default`) goes back to the normal rare chance. No target player -- global, since there's only one

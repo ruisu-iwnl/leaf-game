@@ -333,7 +333,7 @@ commands.finishround = function(admin)
 	end
 end
 
--- Overrides every Yard leaf's Golden Leaf roll (LeafConfig.luau's normal 1.5%) for testing, without
+-- Overrides every Yard leaf's Golden Leaf roll (LeafConfig.luau's normal 0.15%) for testing, without
 -- touching LeafConfig.luau itself -- see LeafSpawner.SetGoldenLeafChanceOverride's own comment for
 -- why. ":goldenleaf 100" (percent, not a 0-1 fraction, since "100" reads far more naturally as a
 -- command argument than "1") makes every newly-spawned Yard leaf golden; ":goldenleaf reset" (or
