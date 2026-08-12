@@ -290,10 +290,15 @@ end
 
 -- Clears a player's quest state and immediately restarts it (via QuestSystem.ResetQuest, not
 -- PlayerQuests.ResetQuest directly) so its content -- including the "Quest Started" toast, if that
--- quest announces one -- can be re-tested live, without a fresh account or rejoin. E.g.
--- ":resetquest me Tutorial" makes QuestPathUI's guiding path/NPCDialogues' guide dialogue treat it as
--- never having been done. ":resetquest me all" resets every quest in QuestConfig at once (today
--- that's just the one, but this stays useful as more get added).
+-- quest announces one, and any objective progress for a chain quest (QuestObjectives.luau) -- can be
+-- re-tested live, without a fresh account or rejoin. E.g. ":resetquest me Tutorial" makes
+-- QuestPathUI's guiding path/NPCDialogues' guide dialogue treat it as never having been done.
+-- Resetting a chain quest whose prerequisite ISN'T also completed just clears it (stays hidden in
+-- QuestLogUI, per the "don't reveal follow-up quests early" design) rather than force-starting it out
+-- of order -- e.g. ":resetquest me GettingStarted2" only actually restarts it if Tutorial is still
+-- complete. ":resetquest me all" resets EVERY quest in QuestConfig via QuestSystem.ResetAllQuests --
+-- a genuinely different two-pass reset-then-restart (not a per-id loop) so a chain's ordering can
+-- never leave a stale started flag on a downstream quest -- see that function's own comment.
 commands.resetquest = function(admin, args)
 	local target = resolveTarget(admin, args[1])
 	if not target then
@@ -301,9 +306,7 @@ commands.resetquest = function(admin, args)
 	end
 
 	if args[2] and args[2]:lower() == "all" then
-		for id in pairs(QuestConfig) do
-			QuestSystem.ResetQuest(target, id)
-		end
+		QuestSystem.ResetAllQuests(target)
 		print(string.format("[Admin] %s reset all of %s's quests", admin.Name, target.Name))
 		return
 	end

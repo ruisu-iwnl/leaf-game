@@ -132,6 +132,7 @@ function TopBar.Build()
 	screenGui.Name = "TopBar"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = UILayout.DisplayOrder.HUD
 
 	-- Hugs its own content on the X axis, anchored at the right edge -- grows leftward as the
 	-- Coins number gets wider, and the gear just gets pushed along with it instead of overlapped.

@@ -83,14 +83,21 @@ full list of 10 badges, their criteria, and how to create the real Roblox Badges
 
 `:resetquest <player|me> <id|all>`
 
-Clears a player's quest state (both "started" and "completed") and immediately restarts it -- not
-just a silent flag reset. If the quest announces a "Quest Started" toast
-(`QuestConfig.<id>.AnnounceStart` isn't `false`), that toast fires again too, so this reproduces the
-full live flow a real fresh start would give, not just next-rejoin behavior.
+Clears a player's quest state (both "started" and "completed", plus any chain quest's per-objective
+progress -- see `QuestObjectives.luau`) and immediately restarts it -- not just a silent flag reset.
+If the quest announces a "Quest Started" toast (`QuestConfig.<id>.AnnounceStart` isn't `false`), that
+toast fires again too, so this reproduces the full live flow a real fresh start would give, not just
+next-rejoin behavior. Resetting a chain quest whose prerequisite isn't ALSO complete just clears it
+(stays hidden in Quest Log, per that system's "don't reveal follow-ups early" design) instead of
+force-starting it out of order. `all` uses a genuinely different two-pass reset (`QuestSystem.
+ResetAllQuests`) rather than looping the single-id reset, specifically so a chain's ordering can never
+leave a stale "started" flag behind on a downstream quest.
 
 | Id | Name | Notes |
 |---|---|---|
 | `Tutorial` | Getting Started | Given by the Lobby's "Ruisu" guide rig. Resetting brings back `QuestPathUI`'s guiding path live, in the same session. Its own "Quest Started" toast is suppressed by design (`AnnounceStart = false`) -- only "Quest Completed" (+200 Coins) ever shows for this one. |
+| `GettingStarted2` | Getting Started II | Unlocks only once `Tutorial` is completed (`RequiresQuest`) -- hidden from Quest Log until then. 3 objectives (deliver 100 leaves, use the Rake 5 times, handpick 50 leaves into a sack), all must complete for the quest itself to auto-complete -- no client "Show me!" step. |
+| `GettingStarted3` | Getting Started III | Unlocks only once `GettingStarted2` is completed. 1 objective: buy any upgrade from the Store. |
 
 `all` resets every quest in `QuestConfig` at once (today that's just `Tutorial`, but stays useful as
 more get added). See `CLAUDE.md`'s Quest System section for the full Started/Completed/reward

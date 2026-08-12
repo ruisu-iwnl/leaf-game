@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 
 local MapConfig = require(ReplicatedStorage.Shared.MapConfig)
 local PanelMotion = require(script.Parent.PanelMotion)
+local UILayout = require(script.Parent.UILayout)
 
 -- Persistent left-center screen HUD showing the current round's map name and cleanup progress.
 -- Only appears once the countdown is over (Active/Results) -- not during Loading/Countdown, so it
@@ -52,6 +53,7 @@ function MapProgressUI.Start()
 		screenGui.Name = "MapProgressUI"
 		screenGui.ResetOnSpawn = false
 		screenGui.IgnoreGuiInset = true
+		screenGui.DisplayOrder = UILayout.DisplayOrder.HUD
 
 		-- Invisible positioner/dimmer PanelMotion animates -- BackgroundTransparency stays 1 always
 		-- (this is a HUD element, not a modal, so no screen dimming), only its Visible flag and the

@@ -23,6 +23,7 @@ local function buildUI()
 	screenGui.Name = "SackUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = UILayout.DisplayOrder.HUD
 
 	local button = Instance.new("TextButton")
 	button.Name = "SackButton"

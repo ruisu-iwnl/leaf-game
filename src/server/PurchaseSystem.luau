@@ -6,6 +6,7 @@ local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
 local MoneySystem = require(script.Parent.MoneySystem)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
+local QuestObjectives = require(script.Parent.QuestObjectives)
 local RakeTool = require(script.Parent.RakeTool)
 local UpgradeConfig = require(ReplicatedStorage.Shared.UpgradeConfig)
 
@@ -75,6 +76,10 @@ local function purchaseItem(player, itemType, itemId)
 
 	if itemType == "Upgrade" then
 		PlayerUpgrades.GrantUpgrade(player, itemId)
+		-- Feeds Getting Started III's "buy any upgrade" objective (see QuestConfig.luau) -- any
+		-- upgrade counts, not a specific one, so this fires unconditionally here rather than
+		-- checking itemId.
+		QuestObjectives.RecordProgress(player, "BuyUpgrade", 1)
 	elseif itemType == "Perk" then
 		PlayerUpgrades.GrantPerk(player, itemId)
 	else

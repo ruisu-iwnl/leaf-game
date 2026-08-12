@@ -4,6 +4,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local ItemPreviewBuilder = require(game:GetService("ReplicatedStorage").Shared.ItemPreviewBuilder)
 local PanelMotion = require(script.Parent.PanelMotion)
+local UILayout = require(script.Parent.UILayout)
 
 -- Store item preview: clicking an unowned cosmetic in StorePanelUI opens this instead of going
 -- straight to a text-only buy confirm -- a slowly-rotating 3D ViewportFrame model of the actual
@@ -98,11 +99,13 @@ local function buildUI()
 	-- escape it. Sibling mode makes a child always render above its own parent regardless of the
 	-- numbers involved, which is what every ZIndex value in this file already assumed.
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	-- Higher than StorePanelUI/NPCDialogueUI/SettingsUI/InventoryUI (all default DisplayOrder 0) --
+	-- Higher than StorePanelUI/NPCDialogueUI/SettingsUI (all in UILayout.DisplayOrder.Panel) --
 	-- previewCosmetic() closes the store panel and opens this one back-to-back, so the store's own
 	-- panel can still be mid fade-out (0.15s) the instant this shows; this guarantees this panel
 	-- always wins that race regardless of which ScreenGui the engine happens to composite later.
-	screenGui.DisplayOrder = 40
+	-- Deliberately BELOW QuestLogUI/InventoryUI's own TopPanel tier -- this only ever opens from
+	-- StorePanelUI, never competes with either of those.
+	screenGui.DisplayOrder = UILayout.DisplayOrder.PanelOverlay
 	screenGui.Parent = playerGui
 
 	local backdrop = Instance.new("Frame")

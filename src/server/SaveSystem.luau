@@ -9,6 +9,7 @@ local LeavesCleanedStat = require(script.Parent.LeavesCleanedStat)
 local MoneySystem = require(script.Parent.MoneySystem)
 local PlayerQuests = require(script.Parent.PlayerQuests)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
+local QuestObjectives = require(script.Parent.QuestObjectives)
 local QuestSystem = require(script.Parent.QuestSystem)
 local RakeTool = require(script.Parent.RakeTool)
 local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
@@ -19,9 +20,10 @@ local SackSystem = require(script.Parent.SackSystem)
 -- player's Backpack/equipped (as a leaf-count list -- see SackSystem.GetPlayerSackLeafCounts/
 -- RestoreSacks), owned upgrades/perks/cosmetics, the Leaf Patron perk's own two cosmetic
 -- preferences (effects on/off, trail color -- see PlayerUpgrades.luau), completed quest ids (see
--- PlayerQuests.luau), and today's daily-quest progress/completion (see DailyQuestSystem.luau --
--- without this, rejoining mid-day would let a player re-earn an already-completed daily's reward)
--- across sessions. Areas and season progress will get added here once those systems exist to have
+-- PlayerQuests.luau), in-progress chain-quest objective counts (see QuestObjectives.luau, e.g.
+-- Getting Started II's "3/5 Rake uses"), and today's daily-quest progress/completion (see
+-- DailyQuestSystem.luau -- without this, rejoining mid-day would let a player re-earn an
+-- already-completed daily's reward) across sessions. Areas and season progress will get added here once those systems exist to have
 -- something to save -- nothing to persist for them yet.
 --
 -- ActiveSackCount itself is still NOT stored as a raw number -- it's derived by RestoreSacks
@@ -142,6 +144,11 @@ local function loadPlayerData(player)
 			PlayerQuests.CompleteQuest(player, id)
 		end
 	end
+	-- Chain quests' (e.g. GettingStarted2/3) per-objective progress -- restored before
+	-- StartEligibleQuests below so a returning player's partial progress (e.g. 3/5 Rake uses) is
+	-- already in place the moment the quest itself starts/resumes. Never needs to restore a quest
+	-- that's already fully complete -- CompletedQuestIds above already covers that case.
+	QuestObjectives.RestoreSaveData(player, result.QuestObjectives)
 	QuestSystem.StartEligibleQuests(player)
 
 	-- Without this, a player could rejoin mid-day and re-earn an already-completed daily's Coins
@@ -185,6 +192,7 @@ local function savePlayerData(player)
 		VIPEffectsEnabled = PlayerUpgrades.IsVIPEffectsEnabled(player),
 		VIPTrailColor = PlayerUpgrades.GetVIPTrailColor(player),
 		CompletedQuestIds = PlayerQuests.GetCompletedQuestIds(player),
+		QuestObjectives = QuestObjectives.GetSaveData(player),
 		DailyQuests = DailyQuestSystem.GetSaveData(player),
 	}
 	local ok, err = pcall(function()

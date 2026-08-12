@@ -5,6 +5,7 @@ local NPCConfig = require(ReplicatedStorage.Shared.NPCConfig)
 local NPCInteraction = require(script.Parent.NPCInteraction)
 local PlayerQuests = require(script.Parent.PlayerQuests)
 local QuestConfig = require(ReplicatedStorage.Shared.QuestConfig)
+local QuestObjectives = require(script.Parent.QuestObjectives)
 
 -- Wires up every quest-giver NPC's Talk prompt (same shared NPCInteraction.luau wiring
 -- StoreSystem.luau uses for Store/Ruisu), owns the quest remotes, and is the one place a quest
@@ -22,8 +23,12 @@ local questCompletedRemote = nil
 
 -- Applies the quest's reward (if any) and fires the QuestCompleted notification -- the one place a
 -- quest is actually, freshly completed by something other than SaveSystem restoring prior progress.
--- Returns false (no-op) if the quest was already completed, so a client re-firing CompleteQuest
--- (e.g. talking to the same NPC twice) can never double-grant a reward or double-toast.
+-- Returns false (no-op) if the quest was already completed, so re-firing CompleteQuest (e.g. talking
+-- to the same NPC twice, or QuestObjectives noticing an already-complete quest again) can never
+-- double-grant a reward or double-toast. Also the trigger for chain-quest progression: re-running
+-- StartEligibleQuests right after a fresh completion means a RequiresQuest follow-up (e.g.
+-- GettingStarted2 after Tutorial) starts LIVE the instant its prerequisite finishes, not just on the
+-- player's next rejoin.
 function QuestSystem.CompleteQuest(player, id)
 	local quest = QuestConfig[id]
 	if not quest then
@@ -40,18 +45,22 @@ function QuestSystem.CompleteQuest(player, id)
 	if questCompletedRemote then
 		questCompletedRemote:FireClient(player, id, rewardCoins or 0)
 	end
+	QuestSystem.StartEligibleQuests(player)
 	return true
 end
 
--- Starts every quest the player is eligible for (not already completed, AutoStartOnJoin isn't
--- explicitly false) and hasn't started yet, firing the QuestStarted notification for each one
--- UNLESS its AnnounceStart is explicitly false. Called once by SaveSystem.luau right after a
--- player's completed-quest state has been restored (or confirmed empty, for a brand-new player) --
--- so this never fires "Quest Started" for something they actually already finished in a prior
--- session.
+-- Starts every quest the player is eligible for -- not already completed, AutoStartOnJoin isn't
+-- explicitly false, and its RequiresQuest prerequisite (if any) is already completed -- and hasn't
+-- started yet, firing the QuestStarted notification for each one UNLESS its AnnounceStart is
+-- explicitly false. Called once by SaveSystem.luau right after a player's completed-quest state has
+-- been restored (or confirmed empty, for a brand-new player), and again by CompleteQuest right after
+-- every fresh completion (see above) -- so a chain's next link picks up immediately either way. Safe
+-- to call repeatedly: PlayerQuests.StartQuest is itself idempotent (returns false, does nothing, for
+-- anything already started or completed).
 function QuestSystem.StartEligibleQuests(player)
 	for id, quest in pairs(QuestConfig) do
-		if quest.AutoStartOnJoin ~= false and PlayerQuests.StartQuest(player, id) then
+		local prerequisiteMet = not quest.RequiresQuest or PlayerQuests.HasCompleted(player, quest.RequiresQuest)
+		if quest.AutoStartOnJoin ~= false and prerequisiteMet and PlayerQuests.StartQuest(player, id) then
 			if quest.AnnounceStart ~= false and questStartedRemote then
 				questStartedRemote:FireClient(player, id)
 			end
@@ -59,22 +68,42 @@ function QuestSystem.StartEligibleQuests(player)
 	end
 end
 
--- Clears completion+started state and immediately restarts it (firing the Started notification
--- again if applicable) -- used by :resetquest (AdminCommands.luau) so testing sees the same live
--- flow a real fresh quest-start would give, instead of a silently-cleared flag with no client
--- feedback until the next rejoin.
+-- Clears completion+started+objective-progress state and, if its prerequisite (if any) is already
+-- satisfied, immediately restarts it (firing the Started notification again if applicable) -- used
+-- by :resetquest (AdminCommands.luau) so testing sees the same live flow a real fresh quest-start
+-- would give, instead of a silently-cleared flag with no client feedback until the next rejoin. A
+-- chain quest whose prerequisite ISN'T satisfied is just left cleared (not force-started out of
+-- order) -- StartEligibleQuests will pick it up the normal way once that prerequisite is actually
+-- completed.
 function QuestSystem.ResetQuest(player, id)
 	local quest = QuestConfig[id]
 	if not quest then
 		return false
 	end
 	PlayerQuests.ResetQuest(player, id)
-	if quest.AutoStartOnJoin ~= false and PlayerQuests.StartQuest(player, id) then
+	QuestObjectives.ResetProgress(player, id)
+
+	local prerequisiteMet = not quest.RequiresQuest or PlayerQuests.HasCompleted(player, quest.RequiresQuest)
+	if quest.AutoStartOnJoin ~= false and prerequisiteMet and PlayerQuests.StartQuest(player, id) then
 		if quest.AnnounceStart ~= false and questStartedRemote then
 			questStartedRemote:FireClient(player, id)
 		end
 	end
 	return true
+end
+
+-- Resets EVERY quest at once in two passes -- clear everything first, THEN try to restart -- rather
+-- than looping ResetQuest per id (which resets-and-immediately-restarts one at a time). That
+-- matters for a chain: pairs() gives no ordering guarantee, so a naive per-id loop could reset
+-- GettingStarted2 (restarting it, since its prerequisite Tutorial hadn't been cleared YET) before
+-- later clearing Tutorial itself -- leaving a stale QuestStarted flag on a quest QuestLogUI would
+-- otherwise keep hidden. Used by :resetquest <player> all (AdminCommands.luau).
+function QuestSystem.ResetAllQuests(player)
+	for id in pairs(QuestConfig) do
+		PlayerQuests.ResetQuest(player, id)
+		QuestObjectives.ResetProgress(player, id)
+	end
+	QuestSystem.StartEligibleQuests(player)
 end
 
 function QuestSystem.Start()
@@ -105,8 +134,19 @@ function QuestSystem.Start()
 		if typeof(questId) ~= "string" then
 			return
 		end
+		local quest = QuestConfig[questId]
+		-- Objective-driven quests (QuestConfig entries with an Objectives array, e.g.
+		-- GettingStarted2/3) can ONLY be completed by QuestObjectives noticing every objective hit
+		-- its Target -- never by this remote directly. Without this guard a client could fire
+		-- CompleteQuest with e.g. "GettingStarted2" and skip straight to the reward without doing
+		-- any of the actual objectives.
+		if not quest or quest.Objectives then
+			return
+		end
 		QuestSystem.CompleteQuest(player, questId)
 	end)
+
+	QuestObjectives.Start(QuestSystem.CompleteQuest)
 
 	local registeredGivers = {}
 	for _, quest in pairs(QuestConfig) do

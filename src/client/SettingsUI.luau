@@ -5,6 +5,7 @@ local UserInputService = game:GetService("UserInputService")
 local PanelMotion = require(script.Parent.PanelMotion)
 local PerformanceMode = require(script.Parent.PerformanceMode)
 local TopBar = require(script.Parent.TopBar)
+local UILayout = require(script.Parent.UILayout)
 local VIPColorPickerUI = require(script.Parent.VIPColorPickerUI)
 
 -- Same autumn-toned rounded-panel look as InventoryUI/PlayerListUI (dark brown, tan stroke,
@@ -103,6 +104,7 @@ local function buildUI()
 	screenGui.Name = "SettingsUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = UILayout.DisplayOrder.Panel
 
 	-- Purely a visual dimmer + input blocker for the 3D world behind it -- NOT a button. Closing
 	-- on an outside click is handled by an explicit screen-bounds check (see SettingsUI.Start),

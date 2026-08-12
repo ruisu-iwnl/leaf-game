@@ -305,6 +305,11 @@ local function buildUI()
 	screenGui.Name = "InventoryUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	-- Explicitly the highest-priority panel in the game (alongside QuestLogUI) -- see
+	-- UILayout.DisplayOrder's own top comment for the full tier list/reasoning. Used to default to
+	-- 0, tied with RoundUI/PlayerListUI/MapProgressUI, which made stacking among them incidental
+	-- rather than deliberate.
+	screenGui.DisplayOrder = UILayout.DisplayOrder.TopPanel
 
 	-- Sits just above the hotbar, right-aligned to match it.
 	local button = Instance.new("TextButton")

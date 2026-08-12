@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 local MapConfig = require(ReplicatedStorage.Shared.MapConfig)
 local RoundConfig = require(ReplicatedStorage.Shared.RoundConfig)
 local PanelMotion = require(script.Parent.PanelMotion)
+local UILayout = require(script.Parent.UILayout)
 
 -- Drives the Lobby's Intermission card, the MapPick vote panel, plus the Loading/Countdown/Active/
 -- Results beats that follow them, purely off the Workspace "RoundState" and its related attributes
@@ -58,6 +59,7 @@ function RoundUI.Start()
 		screenGui.Name = "RoundUI"
 		screenGui.ResetOnSpawn = false
 		screenGui.IgnoreGuiInset = true
+		screenGui.DisplayOrder = UILayout.DisplayOrder.HUD
 
 		-- Small cream info card -- title + subtitle -- built identically for both the Intermission
 		-- "Starting in Ns..." card and the MapPick "map name + difficulty" card below, so the two

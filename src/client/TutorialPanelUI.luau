@@ -3,6 +3,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local PanelMotion = require(script.Parent.PanelMotion)
 local ToolIcons = require(script.Parent.ToolIcons)
+local UILayout = require(script.Parent.UILayout)
 
 -- The tutorial content Ruisu-the-guide's "Show me!" choice opens (see NPCDialogues.luau) --
 -- a static, scrollable explainer covering tools, the cleanup zone, and the shop -- not tied to live
@@ -200,6 +201,7 @@ local function buildUI()
 	screenGui.Name = "TutorialPanelUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = UILayout.DisplayOrder.Panel
 
 	local backdrop = Instance.new("Frame")
 	backdrop.Name = "Backdrop"

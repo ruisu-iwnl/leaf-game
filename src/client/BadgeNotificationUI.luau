@@ -18,6 +18,11 @@ local TIER_COLORS = {
 }
 
 local STAR_GLYPH = "\226\152\133" -- "★"
+-- FredokaOne's "★" doesn't sit centered within its own reported text bounds (confirmed by
+-- screenshot) -- this nudges it down-right to compensate. Glyph-specific: see
+-- ToastNotificationUI.luau's medalGlyph comment for why this isn't just baked into that shared
+-- module for every glyph.
+local STAR_GLYPH_OFFSET = Vector2.new(0.04, 0.06)
 
 function BadgeNotificationUI.Start()
 	local remotes = ReplicatedStorage.Shared:WaitForChild("Remotes")
@@ -32,6 +37,7 @@ function BadgeNotificationUI.Start()
 		ToastNotificationUI.Show({
 			tierColor = TIER_COLORS[badge.Tier],
 			glyph = STAR_GLYPH,
+			glyphOffset = STAR_GLYPH_OFFSET,
 			eyebrow = "BADGE UNLOCKED!",
 			title = badge.Name,
 			description = badge.Description,

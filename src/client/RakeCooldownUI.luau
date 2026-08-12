@@ -28,6 +28,7 @@ local function buildUI()
 	screenGui.Name = "RakeCooldownUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = UILayout.DisplayOrder.HUD
 
 	-- Same position OverheatUI's bar uses -- only one of the two tools is ever equipped (and
 	-- therefore visible) at once, so they never actually overlap on screen.

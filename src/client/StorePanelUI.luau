@@ -14,6 +14,7 @@ local PanelMotion = require(script.Parent.PanelMotion)
 local PerkConfig = require(ReplicatedStorage.Shared.PerkConfig)
 local RakeConfig = require(ReplicatedStorage.Shared.RakeConfig)
 local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
+local UILayout = require(script.Parent.UILayout)
 local UpgradeConfig = require(ReplicatedStorage.Shared.UpgradeConfig)
 
 local STORE_NPC = NPCConfig.Store
@@ -750,6 +751,7 @@ local function buildUI()
 	screenGui.Name = "StorePanelUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = UILayout.DisplayOrder.Panel
 
 	local backdrop = Instance.new("Frame")
 	backdrop.Name = "Backdrop"

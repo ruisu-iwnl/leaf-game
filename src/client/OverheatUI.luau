@@ -31,6 +31,7 @@ local function buildUI()
 	screenGui.Name = "OverheatUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = UILayout.DisplayOrder.HUD
 
 	-- Bottom-center, just clear of the screen edge -- nothing else lives down here now that
 	-- Roblox's default hotbar is disabled in favor of HotbarUI (bottom-right).

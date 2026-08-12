@@ -78,6 +78,7 @@ local function buildUI()
 	screenGui.Name = "PlayerListUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = UILayout.DisplayOrder.HUD
 
 	local toggleButton = Instance.new("TextButton")
 	toggleButton.Name = "ToggleButton"

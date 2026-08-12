@@ -36,4 +36,13 @@ function DailyRotation.GetTodaysDailyIds(dayNumber)
 	return ids
 end
 
+-- Seconds remaining until the CURRENT rotation ends and the next day's 3 take over (i.e. until UTC
+-- midnight for dayNumber+1) -- QuestLogUI.luau uses this to show a live "Xh Ym left" on each daily
+-- row. Pure function of the same os.time()-based day number GetCurrentDayNumber already uses, so it
+-- can't disagree with the rotation itself.
+function DailyRotation.GetSecondsUntilNextRotation(dayNumber)
+	dayNumber = dayNumber or DailyRotation.GetCurrentDayNumber()
+	return math.max(0, (dayNumber + 1) * 86400 - os.time())
+end
+
 return DailyRotation

@@ -7,6 +7,7 @@ local SackConfig = require(ReplicatedStorage.Shared.SackConfig)
 local DailyQuestSystem = require(script.Parent.DailyQuestSystem)
 local LeafSpawner = require(script.Parent.LeafSpawner)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
+local QuestObjectives = require(script.Parent.QuestObjectives)
 
 local SackSystem = {}
 
@@ -552,6 +553,7 @@ local function onCollectLeaf(player, leaf)
 		-- genuine round participation.
 		if zone == "Yard" then
 			DailyQuestSystem.RecordProgress(player, "CollectViaSack", 1)
+			QuestObjectives.RecordProgress(player, "CollectViaSack", 1)
 		end
 	end
 end

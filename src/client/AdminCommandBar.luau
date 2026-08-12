@@ -2,6 +2,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
+local UILayout = require(script.Parent.UILayout)
+
 -- A tiny self-contained command bar for dev/testing commands (":addmoney me 100"), bypassing
 -- Roblox's chat entirely -- this place's chat pipeline wasn't reliably delivering messages to the
 -- server, so this owns both ends (client input -> RemoteEvent -> server) instead of depending on
@@ -20,7 +22,7 @@ local function buildUI()
 	screenGui.Name = "AdminCommandBar"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
-	screenGui.DisplayOrder = 100
+	screenGui.DisplayOrder = UILayout.DisplayOrder.Admin
 
 	local box = Instance.new("TextBox")
 	box.Name = "CommandBox"

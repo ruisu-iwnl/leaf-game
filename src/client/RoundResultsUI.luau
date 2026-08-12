@@ -5,6 +5,7 @@ local Workspace = game:GetService("Workspace")
 
 local PanelMotion = require(script.Parent.PanelMotion)
 local RoundConfig = require(ReplicatedStorage.Shared.RoundConfig)
+local UILayout = require(script.Parent.UILayout)
 
 -- The Results leaderboard shown between a round ending (goal met or timer expiring -- RoundUI's
 -- big "GOAL REACHED!"/"TIME'S UP!" flash covers announcing THAT) and everyone getting faded back
@@ -83,7 +84,7 @@ function RoundResultsUI.Start()
 		screenGui.Name = "RoundResultsUI"
 		screenGui.ResetOnSpawn = false
 		screenGui.IgnoreGuiInset = true
-		screenGui.DisplayOrder = 20
+		screenGui.DisplayOrder = UILayout.DisplayOrder.Banner
 
 		local backdrop = Instance.new("Frame")
 		backdrop.Name = "Backdrop"

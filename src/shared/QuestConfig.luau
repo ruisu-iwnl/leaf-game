@@ -14,18 +14,43 @@
 --   Id                 internal identifier (matches the table key) -- used as the Attribute suffix
 --                      (Quest_<id>/QuestStarted_<id>) and the notification remotes' payload.
 --   Name/Description   player-facing text -- shown in QuestNotificationUI's toasts and
---                       QuestLogUI's panel.
+--                       QuestLogUI's panel. For an Objectives quest, Description is just the short
+--                       framing line -- each objective carries its own line (see below).
 --   GiverNPC           key into NPCConfig.luau -- who hands out/represents this quest.
+--   RequiresQuest       optional prerequisite quest id -- QuestSystem.StartEligibleQuests won't
+--                       start this quest until PlayerQuests.HasCompleted(player, RequiresQuest) is
+--                       true, and it's re-checked (live, no rejoin needed) the instant the
+--                       prerequisite actually completes (QuestSystem.CompleteQuest re-runs
+--                       StartEligibleQuests right after granting a reward). QuestLogUI.luau also
+--                       hides a quest entirely -- not even a "locked" row -- while its prerequisite
+--                       isn't done, so a follow-up in a chain stays a surprise until it unlocks, per
+--                       the explicit ask not to reveal follow-up quests early.
 --   AutoStartOnJoin     defaults to true -- QuestSystem.StartEligibleQuests (called once by
---                       SaveSystem after a player's completed-quest state is restored) starts every
---                       quest this isn't explicitly false for, as long as it isn't already completed.
---                       Set false for a quest that should only start some other way (none do yet).
+--                       SaveSystem after a player's completed-quest state is restored, and again
+--                       after any quest completes) starts every quest this isn't explicitly false
+--                       for, as long as it isn't already completed AND its RequiresQuest (if any) is
+--                       satisfied. Set false for a quest that should only start some other way (none
+--                       do yet).
 --   AnnounceStart       defaults to true -- whether starting this quest fires a "Quest Started" toast
 --                       (QuestNotificationUI.luau). Tutorial sets this false: it's the player's very
 --                       first-ever interaction with the quest system, so a toast before they've even
 --                       seen one before would read as noise, not information -- the guiding path
 --                       (QuestPathUI.luau) already signals it started. Completion still always
 --                       announces, for every quest, no exception.
+--   Objectives          optional array of { Id, Description, Type, Target } -- turns this quest into
+--                       a multi-step one tracked by QuestObjectives.luau instead of the single
+--                       "Show me!"-button CompleteQuest remote Tutorial uses. `Type` keys into the
+--                       SAME objective-type strings DailyQuestSystem.luau's dailies use wherever the
+--                       underlying event is identical (e.g. "DeliverLeaves", "CollectViaSack") --
+--                       both systems get fed by the same call sites, just tracked into two separate
+--                       catalogs -- plus any NEW type a chain quest introduces (e.g. "UseRake",
+--                       "BuyUpgrade") needs exactly one new QuestObjectives.RecordProgress call at
+--                       wherever that event happens, same extension shape as a new daily objective
+--                       type. A quest is auto-completed (no client remote involved at all) the
+--                       instant every one of its objectives reaches its Target -- see
+--                       QuestObjectives.luau's onAllComplete callback. A quest with NO Objectives
+--                       field (e.g. Tutorial) is untouched by any of this, still completed only by a
+--                       client firing the CompleteQuest remote.
 --   Reward.Coins        optional flat Coins payout granted exactly once, the moment this quest is
 --                       actually, freshly completed (never re-granted on a save restore replaying
 --                       old progress -- see QuestSystem.CompleteQuest vs PlayerQuests.CompleteQuest).
@@ -38,5 +63,39 @@ return {
 		AnnounceStart = false,
 		Reward = { Coins = 200 }, -- a small welcome bonus -- also the one thing that actually
 			-- exercises the reward system today, since this is the only quest that exists yet
+	},
+
+	-- First link of the "Getting Started" chain: unlocks the moment Tutorial completes (RequiresQuest),
+	-- stays entirely hidden from QuestLogUI until then. Three objectives spanning three different
+	-- mechanics on purpose -- delivering leaves (the core loop, already tracked for dailies), the
+	-- Rake specifically (a NEW objective type, "UseRake" -- see RakeTool.luau's performRake for the
+	-- one call site), and the Sack specifically (reuses "CollectViaSack", same as the daily).
+	GettingStarted2 = {
+		Id = "GettingStarted2",
+		Name = "Getting Started II",
+		Description = "Put everything you've learned to work.",
+		GiverNPC = "Guide",
+		RequiresQuest = "Tutorial",
+		Objectives = {
+			{ Id = "BlowLeaves", Description = "Blow 100 leaves into the Cleanup Zone.", Type = "DeliverLeaves", Target = 100 },
+			{ Id = "UseRake", Description = "Use the Rake 5 times.", Type = "UseRake", Target = 5 },
+			{ Id = "HandpickLeaves", Description = "Handpick 50 leaves into a sack.", Type = "CollectViaSack", Target = 50 },
+		},
+		Reward = { Coins = 300 },
+	},
+
+	-- Second link: unlocks only once GettingStarted2 completes. A single objective ("BuyUpgrade",
+	-- another new type -- see PurchaseSystem.luau's purchaseItem) nudges a player toward the Store
+	-- for the first time now that they have Coins worth spending.
+	GettingStarted3 = {
+		Id = "GettingStarted3",
+		Name = "Getting Started III",
+		Description = "Visit Ruisu's shop and gear up.",
+		GiverNPC = "Guide",
+		RequiresQuest = "GettingStarted2",
+		Objectives = {
+			{ Id = "BuyUpgrade", Description = "Buy any upgrade from the shop.", Type = "BuyUpgrade", Target = 1 },
+		},
+		Reward = { Coins = 500 },
 	},
 }

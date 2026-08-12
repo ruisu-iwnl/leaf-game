@@ -5,6 +5,7 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local PanelMotion = require(script.Parent.PanelMotion)
+local UILayout = require(script.Parent.UILayout)
 
 -- Shared dialogue box for every NPC in the game -- a Persona/Yakuza-style box anchored to the
 -- bottom-center of the screen, a live portrait of the NPC's own rig on the left (angled + framed
@@ -142,7 +143,13 @@ local function buildChoiceButton(parent, text, color, textColor, layoutOrder)
 	local button = Instance.new("TextButton")
 	button.Name = "Choice" .. layoutOrder
 	button.LayoutOrder = layoutOrder
-	button.Size = UDim2.new(0, 96, 0, 34)
+	-- AutomaticSize.X instead of a fixed 96px -- a fixed width let longer choice text (e.g. "Cool,
+	-- what's next?") overflow past the button's own edges and overlap its neighbor. Growing to fit
+	-- the text (via the UIPadding below) means it can never overlap again, at the cost of the row
+	-- itself getting wider for longer choices -- buttonRow's own AutomaticSize.X + its
+	-- HorizontalAlignment.Right already absorb that by growing further left.
+	button.AutomaticSize = Enum.AutomaticSize.X
+	button.Size = UDim2.new(0, 0, 0, 34)
 	button.BackgroundColor3 = color
 	button.AutoButtonColor = false
 	button.Font = Enum.Font.FredokaOne
@@ -157,6 +164,11 @@ local function buildChoiceButton(parent, text, color, textColor, layoutOrder)
 	corner.CornerRadius = UDim.new(0, 10)
 	corner.Parent = button
 
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0, 16)
+	padding.PaddingRight = UDim.new(0, 16)
+	padding.Parent = button
+
 	PanelMotion.AnimateButton(button)
 
 	return button
@@ -170,6 +182,7 @@ local function buildUI()
 	screenGui.Name = "NPCDialogueUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = UILayout.DisplayOrder.Panel
 
 	-- Purely a visual dimmer + input blocker for the 3D world behind it -- NOT a button, same
 	-- reasoning as SettingsUI/InventoryUI's backdrops (click passthrough turned out unreliable for

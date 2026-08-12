@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local PanelMotion = require(script.Parent.PanelMotion)
+local UILayout = require(script.Parent.UILayout)
 
 -- Opened from SettingsUI.luau's "Trail Color" row (Leaf Patron owners only) -- 3 draggable RGB
 -- sliders + a live swatch preview, or a "Rainbow" button to go back to the default animated cycle.
@@ -175,7 +176,7 @@ local function buildUI()
 	screenGui.Name = "VIPColorPickerUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
-	screenGui.DisplayOrder = 25 -- above SettingsUI's default (0), same "layered on top" reasoning as the module comment
+	screenGui.DisplayOrder = UILayout.DisplayOrder.PanelOverlay -- above SettingsUI's Panel tier, same "layered on top" reasoning as the module comment
 
 	local backdrop = Instance.new("Frame")
 	backdrop.Name = "Backdrop"

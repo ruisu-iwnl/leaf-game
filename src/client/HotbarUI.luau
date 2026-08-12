@@ -82,6 +82,7 @@ function HotbarUI.Start()
 	screenGui.Name = "HotbarUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
+	screenGui.DisplayOrder = UILayout.DisplayOrder.HUD
 
 	local container = Instance.new("Frame")
 	container.Name = "Container"

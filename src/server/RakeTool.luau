@@ -5,6 +5,7 @@ local Workspace = game:GetService("Workspace")
 
 local LeafSpawner = require(script.Parent.LeafSpawner)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
+local QuestObjectives = require(script.Parent.QuestObjectives)
 local RakeConfig = require(ReplicatedStorage.Shared.RakeConfig)
 
 -- Second leaf-collection tool alongside the Blower: instead of pushing leaves away, it drags
@@ -279,6 +280,12 @@ local function watchTool(tool)
 			LeafSpawner.ApplyRake(player, origin, direction, effectiveConfig)
 			dustEmitter:Emit(RakeConfig.ParticleBurstCount)
 			playSweepGesture(tool.Parent)
+			if player then
+				-- A real rake use (not a no-op click with nowhere to aim) -- feeds chain quests
+				-- like Getting Started II's "use the Rake 5 times" objective (see QuestConfig.luau).
+				-- No daily quest reuses this type today, unlike DeliverLeaves/CollectViaSack.
+				QuestObjectives.RecordProgress(player, "UseRake", 1)
+			end
 		end
 		task.spawn(runCooldown, player)
 	end

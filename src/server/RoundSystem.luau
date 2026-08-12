@@ -5,6 +5,7 @@ local Workspace = game:GetService("Workspace")
 
 local MapConfig = require(ReplicatedStorage.Shared.MapConfig)
 local PlayerConfig = require(ReplicatedStorage.Shared.PlayerConfig)
+local QuestConfig = require(ReplicatedStorage.Shared.QuestConfig)
 local RoundConfig = require(ReplicatedStorage.Shared.RoundConfig)
 local DailyQuestSystem = require(script.Parent.DailyQuestSystem)
 local LeafSpawner = require(script.Parent.LeafSpawner)
@@ -131,6 +132,21 @@ local RoundSystem = {}
 --                           is sitting out), beginRound bails out back to Intermission immediately
 --                           instead of running a full Loading/Countdown/Active/Results cycle for
 --                           zero players -- see the `#participants == 0` check there.
+--
+-- A player with the Tutorial quest (QuestConfig.luau) STARTED but not yet COMPLETED is treated
+-- exactly like an AFK player everywhere IsAFK is checked above (see isSittingOutThisRound) --
+-- excluded from countActiveIntermissionPlayers, the map vote, and beginRound's `participants`
+-- snapshot. Getting walked into a round mid-tutorial would interrupt it: NPCDialogueUI's
+-- AUTO_CLOSE_DISTANCE would close the conversation with the guide the instant they're teleported
+-- away, and QuestPathUI's guiding path/arrow would vanish (it's gated on InActiveRound). Unlike
+-- IsAFK, this isn't a player-facing toggle -- it's fully automatic, keyed off PlayerQuests'
+-- own `QuestStarted_Tutorial`/`Quest_Tutorial` Attributes, so a player doing the tutorial never has
+-- to remember to flip anything, and it clears itself the instant they finish (or skip to the end of)
+-- the guide's conversation. Deliberately NOT extended to GettingStarted2/GettingStarted3 -- those
+-- objectives (deliver leaves, use the Rake, collect via Sack, buy an upgrade) are largely things a
+-- player would naturally be doing DURING a round anyway, unlike Tutorial's Lobby-only guide
+-- conversation, so sitting them out of rounds while those are active would work against the quest
+-- rather than protecting it. Revisit if that turns out wrong in practice.
 local state = "Intermission"
 local currentMap = MapConfig[1]
 local roundContributions = {} -- Player -> leaves delivered this round, for the Results MVP tag
@@ -371,12 +387,25 @@ local function applyResultsRewards(endReason, finalProgress)
 	end
 end
 
+local TUTORIAL_QUEST_ID = QuestConfig.Tutorial.Id
+
+-- true for an explicitly-AFK player, OR a player with the Tutorial quest started but not yet
+-- completed -- both are excluded from Intermission's player count, the map vote, and beginRound's
+-- `participants` snapshot. See this file's own top attribute-doc block for why Tutorial specifically.
+local function isSittingOutThisRound(player)
+	if player:GetAttribute("IsAFK") then
+		return true
+	end
+	return player:GetAttribute("QuestStarted_" .. TUTORIAL_QUEST_ID) == true
+		and player:GetAttribute("Quest_" .. TUTORIAL_QUEST_ID) ~= true
+end
+
 -- How many connected players are actually "active" for Intermission purposes -- see the
 -- IntermissionActive attribute (set in initPlayerIntermissionState, Start()) for what that means.
 local function countActiveIntermissionPlayers()
 	local count = 0
 	for _, player in ipairs(Players:GetPlayers()) do
-		if player:GetAttribute("IntermissionActive") and not player:GetAttribute("IsAFK") then
+		if player:GetAttribute("IntermissionActive") and not isSittingOutThisRound(player) then
 			count += 1
 		end
 	end
@@ -561,7 +590,7 @@ local function beginRound()
 	-- deliberately taken as late as possible, immediately before the teleport below.
 	local participants = {}
 	for _, player in ipairs(Players:GetPlayers()) do
-		if not player:GetAttribute("IsAFK") then
+		if not isSittingOutThisRound(player) then
 			table.insert(participants, player)
 		end
 	end
@@ -845,7 +874,7 @@ function RoundSystem.Start()
 	-- vote fired right as the phase ends, or a map that didn't make this round's randomly-sampled
 	-- ballot, is silently dropped rather than corrupting the tally.
 	mapVoteRemote.OnServerEvent:Connect(function(player, mapId)
-		if state ~= "MapPick" or player:GetAttribute("IsAFK") then
+		if state ~= "MapPick" or isSittingOutThisRound(player) then
 			return
 		end
 		local validMap = false

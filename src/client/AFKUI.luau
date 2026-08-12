@@ -4,6 +4,7 @@ local Workspace = game:GetService("Workspace")
 
 local PanelMotion = require(script.Parent.PanelMotion)
 local TopBar = require(script.Parent.TopBar)
+local UILayout = require(script.Parent.UILayout)
 
 -- The AFK toggle -- a "Z" icon next to the Settings gear (TopBar.luau builds the shared widget, same
 -- reasoning as CoinsUI/SettingsUI sharing that row). Marking yourself AFK pulls you out of
@@ -61,12 +62,13 @@ function AFKUI.Start()
 		screenGui.Name = "AFKUI"
 		screenGui.ResetOnSpawn = false
 		screenGui.IgnoreGuiInset = true
-		-- Above every other custom panel in the game (StorePanelUI/SettingsUI/InventoryUI/
-		-- NPCDialogueUI/RoundUI's own cards all sit at the default 0, RoundResultsUI at 20,
-		-- ItemPreviewUI at 40, ToastNotificationUI at 60) so the confirmation toast below is never
-		-- hidden behind whatever else happens to be open when the AFK icon is clicked. Only
-		-- AdminCommandBar (100, a dev tool) stays above this on purpose.
-		screenGui.DisplayOrder = 90
+		-- Same tier as ToastNotificationUI (both are transient confirmation toasts) -- above every
+		-- ordinary Panel/PanelOverlay so this is never hidden behind whatever else happens to be
+		-- open when the AFK icon is clicked, but below QuestLogUI/InventoryUI's TopPanel tier and
+		-- AdminCommandBar. Used to be 90 (above literally everything except AdminCommandBar,
+		-- including QuestLogUI/InventoryUI) -- see UILayout.DisplayOrder's own top comment for the
+		-- full tier list/reasoning behind bringing it down to here.
+		screenGui.DisplayOrder = UILayout.DisplayOrder.Toast
 
 		-- Small confirmation toast -- pops in just under the icon, holds briefly, pops back out.
 		-- Anchored top-right rather than the top-center slot every round-state card already uses

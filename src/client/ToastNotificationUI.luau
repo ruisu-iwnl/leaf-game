@@ -1,6 +1,8 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 
+local UILayout = require(script.Parent.UILayout)
+
 -- Generic top-center toast notification -- the shared shell any feature can push a message through
 -- via ToastNotificationUI.Show({ tierColor, glyph, eyebrow, title, description, duration? }),
 -- instead of every feature (badges now, whatever else later) rebuilding its own card/animation/
@@ -51,7 +53,10 @@ local function buildUI()
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	screenGui.DisplayOrder = 60
+	-- Above every ordinary Panel/PanelOverlay so a toast is never hidden behind whatever else
+	-- happens to be open, but still below QuestLogUI/InventoryUI's TopPanel tier -- see
+	-- UILayout.DisplayOrder's own top comment.
+	screenGui.DisplayOrder = UILayout.DisplayOrder.Toast
 
 	-- Purely a positioning/animation wrapper -- no background of its own (see `fill` below), so
 	-- there's nothing here to fade in/out, only slide (Position) and pop (UIScale) to animate.
@@ -145,16 +150,19 @@ local function buildUI()
 	medalStroke.Parent = medal
 
 	-- Anchored/sized to exactly the medal's own center rather than filling the whole circle.
-	-- FredokaOne's "★" glyph doesn't sit centered within its own reported text bounds -- its ink
-	-- sits visibly up and to the left of the box's true geometric center regardless of box size
+	-- FredokaOne glyphs don't always sit centered within their own reported text bounds -- e.g. "★"
+	-- visibly sits up and to the left of the box's true geometric center regardless of box size
 	-- (confirmed by screenshot: the same offset showed up at a smaller box size too, so it isn't a
-	-- box-size issue) -- Position is nudged down-right by a few percent to compensate for that,
-	-- on top of TextXAlignment/TextYAlignment = Center handling the box itself.
+	-- box-size issue). That offset is GLYPH-SPECIFIC, though -- reusing the star's tuned nudge for a
+	-- different glyph (e.g. "✓") pushed IT off-center instead, since a checkmark's own ink doesn't
+	-- share the star's particular bias. Position is therefore set fresh per Show() call from
+	-- config.glyphOffset (see showOne below) rather than baked in here once -- this is just the
+	-- neutral starting point, actual centering happens in showOne.
 	local medalGlyph = Instance.new("TextLabel")
 	medalGlyph.Name = "Glyph"
 	medalGlyph.Active = false
 	medalGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
-	medalGlyph.Position = UDim2.new(0.54, 0, 0.56, 0)
+	medalGlyph.Position = UDim2.new(0.5, 0, 0.5, 0)
 	medalGlyph.Size = UDim2.new(0.76, 0, 0.76, 0)
 	medalGlyph.BackgroundTransparency = 1
 	medalGlyph.Font = Enum.Font.FredokaOne
@@ -255,6 +263,11 @@ function ToastNotificationUI.Start()
 		accentBar.BackgroundColor3 = tierColor
 		medal.BackgroundColor3 = tierColor
 		medalGlyph.Text = config.glyph or ""
+		-- config.glyphOffset (Vector2, fraction of the medal's size) lets a caller compensate for
+		-- its OWN glyph's particular FredokaOne ink-centering quirk (see medalGlyph's own comment
+		-- above) -- defaults to true geometric center for a glyph that doesn't need any compensation.
+		local glyphOffset = config.glyphOffset or Vector2.new(0, 0)
+		medalGlyph.Position = UDim2.new(0.5 + glyphOffset.X, 0, 0.5 + glyphOffset.Y, 0)
 		eyebrow.Text = config.eyebrow or ""
 		titleLabel.Text = config.title or ""
 		descriptionLabel.Text = config.description or ""
