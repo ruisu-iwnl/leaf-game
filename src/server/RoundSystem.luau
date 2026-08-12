@@ -7,6 +7,7 @@ local MapConfig = require(ReplicatedStorage.Shared.MapConfig)
 local PlayerConfig = require(ReplicatedStorage.Shared.PlayerConfig)
 local RoundConfig = require(ReplicatedStorage.Shared.RoundConfig)
 local LeafSpawner = require(script.Parent.LeafSpawner)
+local MoneySystem = require(script.Parent.MoneySystem)
 local SackSystem = require(script.Parent.SackSystem)
 
 -- Orchestrates the Lobby <-> map loop: Intermission (every map hidden in ServerStorage, everyone
@@ -49,10 +50,17 @@ local RoundSystem = {}
 --                           Intermission -- drives RoundUI's "Starting in Ns..." card
 --   RoundMapPickEndsAt    : server timestamp voting closes at the latest (MapVoteMinSeconds/
 --                           MapPickSeconds -- see RoundConfig.luau) -- voting can also close
---                           earlier once every connected player has voted. RoundUI builds its vote
---                           cards straight from the shared MapConfig module (no server announcement
---                           needed for *which* maps are votable) and gets live tallies via the
---                           MapVoteUpdate remote instead of an attribute.
+--                           earlier once every connected player has voted.
+--   RoundMapPickCandidates : comma-separated MapConfig Ids for THIS round's ballot -- a random
+--                           subset/order of MapConfig (RoundConfig.MapPickBallotSize entries, see
+--                           pickRandomBallot), not necessarily every map in the pool, so RoundUI
+--                           can no longer assume "every MapConfig entry is votable" and reads this
+--                           instead to know which cards to build. Live tallies still arrive via the
+--                           MapVoteUpdate remote, not an attribute.
+--   RoundMapPickToken     : bumped every MapPick phase, same reason as RoundMapTitleToken -- two
+--                           rounds could randomly land on the identical ballot+order, and
+--                           GetAttributeChangedSignal isn't guaranteed to fire on an unchanged
+--                           value.
 --   RoundMapResultName/RoundMapResultCategory/RoundMapResultPlayers : the winning map's
 --                           DisplayName/Category/RecommendedPlayers, set entering MapResult (after
 --                           voting closes and MapTallySeconds' pause), for RoundUI's "NEXT MAP"
@@ -91,10 +99,53 @@ local RoundSystem = {}
 --                           vote panel and the Intermission card are NOT gated on this -- those
 --                           happen before any teleport for the round even occurs, so they still
 --                           apply to everyone connected at the time.
+--   IntermissionActive    : false the instant a player connects, true only once their character
+--                           has finished loading in for the first time (set in
+--                           initPlayerIntermissionState, Start()). runIntermission won't start the
+--                           "Starting in Ns..." countdown while zero connected players have this
+--                           true -- see countActiveIntermissionPlayers.
+--   IsAFK                 : per-player, default false, toggled by the client's AFK icon (TopBar.luau
+--                           /AFKUI.luau) via the SetAFK remote. true excludes the player from
+--                           countActiveIntermissionPlayers (an all-AFK Lobby never starts counting
+--                           down), from this round's map vote (mapVoteRemote's handler rejects a
+--                           vote from an AFK player, and going AFK mid-vote drops any vote already
+--                           cast), and from beginRound's `participants` snapshot -- an AFK player is
+--                           simply never teleported onto the map, never frozen during Countdown, and
+--                           never included in the Results leaderboard (see buildResultsList). Can be
+--                           toggled any time the player is still physically standing in the Lobby --
+--                           Intermission/MapPick/MapTally/MapResult/Loading, all the way up until
+--                           `participants` is actually snapshotted right before the teleport onto the
+--                           map -- a toggle after that instant is silently dropped (SetAFK's
+--                           handler). Loading is included deliberately: the map is being revealed
+--                           and leaves are spawning 10,000 studs away during it (see
+--                           RoundConfig.MapAwayOffset), but the PLAYER hasn't moved yet, so it reads
+--                           to them as still being in the Lobby -- locking the toggle out the instant
+--                           RoundState flips to "Loading" (rather than at the actual teleport, ~
+--                           RoundConfig.LoadingDelaySeconds later) was the bug a player actually hit:
+--                           a toggle made mid-Loading, well before they'd been moved anywhere, was
+--                           being silently rejected.
+--                           If EVERY connected player is AFK by the time beginRound snapshots
+--                           `participants` (nobody actually toggled off in time, or everyone present
+--                           is sitting out), beginRound bails out back to Intermission immediately
+--                           instead of running a full Loading/Countdown/Active/Results cycle for
+--                           zero players -- see the `#participants == 0` check there.
 local state = "Intermission"
 local currentMap = MapConfig[1]
 local roundContributions = {} -- Player -> leaves delivered this round, for the Results MVP tag
+-- Player -> Coins earned via leaf delivery this round (see RoundSystem.RecordCoinsEarned, called
+-- from init.server.luau's LeafSpawner.OnLeafDelivered listener -- the one place the coins-per-leaf
+-- formula, perks included, actually lives). Reset alongside roundContributions in beginRound().
+local roundCoinsEarned = {}
+-- Player -> signed Coins actually applied as a Results bonus/penalty this round (positive = bonus,
+-- negative = penalty), set once by applyResultsRewards right as an Active round ends. Read by
+-- buildResultsList so RoundResultsUI can show it per player.
+local roundCoinDeltas = {}
 local mapVotes = {} -- Player -> MapConfig Id, reset every MapPick phase
+-- The randomly-sampled/shuffled subset of MapConfig actually up for vote this round (see
+-- pickRandomBallot below) -- RoundConfig.MapPickBallotSize entries (or all of MapConfig, if it has
+-- fewer than that). Votes and the tally are both scoped to this, not the full MapConfig table, so
+-- a vote for a map that didn't make this round's ballot can never be cast or counted.
+local currentBallot = {}
 
 -- Set by RoundSystem.ForceEndRound() (wired to the ":finishround" admin command), consumed by the
 -- Active-phase poll loop in beginRound() -- lets testing skip straight to Results without waiting
@@ -141,6 +192,31 @@ local function teleportPlayersTo(players, part, inRound)
 	end
 end
 
+-- With Workspace.StreamingEnabled on (see leaf.rbxlx/default.project.json), an instant long-range
+-- teleport -- like the Lobby<->map jump, which lands players either right next to a map that was
+-- just pulled out of ServerStorage or right next to the Lobby again -- doesn't guarantee the
+-- destination region has actually streamed in yet. Without this, a player could fade back in to an
+-- empty void, or fall through not-yet-loaded ground, for a frame or more. RequestStreamAroundAsync
+-- forces exactly that region to load; fired per player via task.spawn so N players stream in
+-- parallel rather than serially, bounded by RoundConfig.StreamAroundTimeoutSeconds so one
+-- slow-loading client can never hang everyone else's fade-in.
+local function streamPlayersIn(players, position)
+	local remaining = 0
+	for _, player in ipairs(players) do
+		remaining += 1
+		task.spawn(function()
+			pcall(function()
+				player:RequestStreamAroundAsync(position, RoundConfig.StreamAroundTimeoutSeconds)
+			end)
+			remaining -= 1
+		end)
+	end
+	local deadline = Workspace:GetServerTimeNow() + RoundConfig.StreamAroundTimeoutSeconds + 0.5
+	while remaining > 0 and Workspace:GetServerTimeNow() < deadline do
+		task.wait(0.05)
+	end
+end
+
 -- Pushes every BasePart under a map's folder by a fixed offset -- every map is authored close to
 -- the Lobby in leaf.rbxlx (convenient for building), so without this a player standing on an
 -- active map could see the Lobby (or, later, another map) off in the distance. Called with
@@ -164,8 +240,8 @@ end
 -- `inRound` is threaded straight through to teleportPlayersTo (see its comment) -- fired only to
 -- the players actually being moved, not FireAllClients, so a player sitting out this round in the
 -- Lobby never sees a pointless screen-fade flash for a teleport that doesn't touch them.
-local function fadeTeleport(part, inRound)
-	local players = Players:GetPlayers()
+local function fadeTeleport(part, inRound, playersOverride)
+	local players = playersOverride or Players:GetPlayers()
 
 	for _, player in ipairs(players) do
 		screenFadeRemote:FireClient(player, "Out", RoundConfig.FadeSeconds)
@@ -173,7 +249,7 @@ local function fadeTeleport(part, inRound)
 	task.wait(RoundConfig.FadeSeconds)
 
 	teleportPlayersTo(players, part, inRound)
-	task.wait(0.15) -- lets the teleport's replication actually land before fading back in
+	streamPlayersIn(players, part.Position) -- lets the destination actually stream in before fading back
 
 	for _, player in ipairs(players) do
 		screenFadeRemote:FireClient(player, "In", RoundConfig.FadeSeconds)
@@ -199,8 +275,11 @@ local function setPlayerFrozen(player, frozen)
 	end
 end
 
-local function freezePlayers(frozen)
-	for _, player in ipairs(Players:GetPlayers()) do
+-- `players` defaults to everyone connected, but beginRound passes its own `participants` snapshot
+-- (round participants only) so an AFK player standing in the Lobby during another round's Countdown
+-- never gets their own WalkSpeed zeroed for a round they were never part of.
+local function freezePlayers(frozen, players)
+	for _, player in ipairs(players or Players:GetPlayers()) do
 		setPlayerFrozen(player, frozen)
 	end
 end
@@ -217,11 +296,21 @@ end
 -- Builds the Results leaderboard: every currently-connected player, sorted by leaves delivered
 -- this round (ties broken by name for a stable order), with the top scorer flagged as MVP -- but
 -- only if someone actually delivered at least one leaf, so an empty/skipped round doesn't crown
--- an MVP with 0.
+-- an MVP with 0. CoinDelta (signed -- positive bonus, negative penalty, 0 if neither applied) comes
+-- from applyResultsRewards, which must run before this is called (see beginRound).
 local function buildResultsList()
 	local list = {}
 	for _, player in ipairs(Players:GetPlayers()) do
-		table.insert(list, { Name = player.Name, Count = roundContributions[player] or 0 })
+		-- Only players actually teleported into THIS round (see beginRound's `participants`
+		-- snapshot) -- excludes AFK players and anyone who joined too late to be part of it, so
+		-- they don't show up as a padded "0 leaves" row for round they never played.
+		if player:GetAttribute("InActiveRound") == true then
+			table.insert(list, {
+				Name = player.Name,
+				Count = roundContributions[player] or 0,
+				CoinDelta = roundCoinDeltas[player] or 0,
+			})
+		end
 	end
 	table.sort(list, function(a, b)
 		if a.Count == b.Count then
@@ -235,10 +324,75 @@ local function buildResultsList()
 	return list
 end
 
+-- Turns each participant's round-earned Coins into either a completion bonus (goal reached before
+-- the timer) or a shortfall penalty (timer ran out with the cleanup still meaningfully unfinished)
+-- -- called once, right as an Active round ends, before Results fires. Replaces the "risk/reward
+-- distinction" this round loop originally shipped without (see this file's Third tuning pass in
+-- CLAUDE.md) -- coins are still paid out immediately per leaf delivered, never held back; this
+-- only ever adjusts the balance by a percentage of what was ALREADY earned this round, on top of
+-- that.
+--   Goal reached (endReason == "Goal")            : +RoundConfig.ResultsGoalBonusPercent of
+--                                                     roundCoinsEarned, added.
+--   Timer, finalProgress >= ResultsGoodProgressThreshold : no penalty -- a near-finished round
+--                                                     (see RoundConfig's own comment on the
+--                                                     threshold) still gets complimented in
+--                                                     RoundResultsUI, not docked.
+--   Timer, finalProgress < ResultsGoodProgressThreshold  : -(1 - finalProgress) of
+--                                                     roundCoinsEarned, deducted (clamped to
+--                                                     whatever the player actually still has via
+--                                                     MoneySystem.DeductCoins -- a penalty always
+--                                                     applies, it just never goes negative).
+-- Players who earned 0 Coins this round (didn't deliver anything) are skipped entirely -- nothing
+-- to bonus or deduct.
+local function applyResultsRewards(endReason, finalProgress)
+	roundCoinDeltas = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		local earned = roundCoinsEarned[player] or 0
+		if earned > 0 then
+			if endReason == "Goal" then
+				local bonus = math.floor(earned * RoundConfig.ResultsGoalBonusPercent)
+				if bonus > 0 then
+					MoneySystem.AddCoins(player, bonus)
+					roundCoinDeltas[player] = bonus
+				end
+			elseif finalProgress < RoundConfig.ResultsGoodProgressThreshold then
+				local penalty = math.floor(earned * (1 - finalProgress))
+				if penalty > 0 then
+					local deducted = MoneySystem.DeductCoins(player, penalty)
+					if deducted > 0 then
+						roundCoinDeltas[player] = -deducted
+					end
+				end
+			end
+		end
+	end
+end
+
+-- How many connected players are actually "active" for Intermission purposes -- see the
+-- IntermissionActive attribute (set in initPlayerIntermissionState, Start()) for what that means.
+local function countActiveIntermissionPlayers()
+	local count = 0
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player:GetAttribute("IntermissionActive") and not player:GetAttribute("IsAFK") then
+			count += 1
+		end
+	end
+	return count
+end
+
 -- Idle beat in the Lobby before the next round automatically starts picking a map -- replaces the
--- old manual "Start Round" button entirely.
+-- old manual "Start Round" button entirely. Doesn't start the actual "Starting in Ns..." countdown
+-- until at least one player is both connected AND actually active (loaded in, see
+-- initPlayerIntermissionState) -- an empty server, or one where everyone just joined and hasn't
+-- finished loading, shouldn't burn through Intermission into a round nobody's actually there for.
+-- RoundIntermissionEndsAt stays nil the whole time no one's active, so RoundUI's Intermission card
+-- shows a "Waiting for players..." message instead of a countdown to nothing.
 local function runIntermission()
 	setState("Intermission")
+	Workspace:SetAttribute("RoundIntermissionEndsAt", nil)
+	while countActiveIntermissionPlayers() == 0 do
+		task.wait(0.5)
+	end
 	Workspace:SetAttribute("RoundIntermissionEndsAt", Workspace:GetServerTimeNow() + RoundConfig.IntermissionSeconds)
 	task.wait(RoundConfig.IntermissionSeconds)
 end
@@ -257,17 +411,18 @@ local function broadcastMapVotes()
 	mapVoteUpdateRemote:FireAllClients(counts, #Players:GetPlayers())
 end
 
--- Picks the map with the most votes, ties broken by MapConfig order -- defaults to MapConfig[1]
+-- Picks the map with the most votes, ties broken by ballot order -- defaults to currentBallot[1]
 -- if nobody voted at all (bestCount starts below every possible real count, so the first entry
--- always wins by default).
+-- always wins by default). Scoped to currentBallot, not all of MapConfig, since only ballot
+-- entries could ever have received a vote (see mapVoteRemote's validation in Start()).
 local function tallyMapVote()
 	local counts = {}
 	for _, mapId in pairs(mapVotes) do
 		counts[mapId] = (counts[mapId] or 0) + 1
 	end
-	local winner = MapConfig[1]
+	local winner = currentBallot[1]
 	local bestCount = -1
-	for _, mapEntry in ipairs(MapConfig) do
+	for _, mapEntry in ipairs(currentBallot) do
 		local count = counts[mapEntry.Id] or 0
 		if count > bestCount then
 			bestCount = count
@@ -277,10 +432,32 @@ local function tallyMapVote()
 	return winner
 end
 
--- A real vote, even with only one map/one player on the roster today -- RoundUI.luau shows every
--- MapConfig entry as a votable card (it already has the shared MapConfig module, so it doesn't
--- need the server to announce candidates first) with a Vote button. Three beats, each its own
--- RoundState so RoundUI can render a distinct step instead of an instant cut between them:
+-- Randomly samples RoundConfig.MapPickBallotSize entries out of MapConfig (shuffled order too, via
+-- a partial Fisher-Yates), so the vote panel shows a fresh subset/order every round instead of
+-- always the same fixed list. Clamped to #MapConfig so this still works fine if the pool ever has
+-- fewer maps than the configured ballot size.
+local function pickRandomBallot()
+	local pool = {}
+	for _, mapEntry in ipairs(MapConfig) do
+		table.insert(pool, mapEntry)
+	end
+	for i = #pool, 2, -1 do
+		local j = math.random(i)
+		pool[i], pool[j] = pool[j], pool[i]
+	end
+	local ballotSize = math.min(RoundConfig.MapPickBallotSize, #pool)
+	local ballot = {}
+	for i = 1, ballotSize do
+		table.insert(ballot, pool[i])
+	end
+	return ballot
+end
+
+-- A real vote, even with only one map/one player on the roster today -- RoundUI.luau shows a
+-- Vote button for each map in this round's ballot (a random subset/order of MapConfig, see
+-- pickRandomBallot -- announced via RoundMapPickCandidates below, since the client can no longer
+-- assume "every MapConfig entry" is what's votable). Three beats, each its own RoundState so
+-- RoundUI can render a distinct step instead of an instant cut between them:
 --   MapPick  -- voting is open. Waits for everyone connected to vote AND MapVoteMinSeconds to have
 --              passed (so a solo/fast vote can't make the whole phase feel skipped), or the outer
 --              MapPickSeconds timeout, whichever's first -- same "goal or timer" shape the Active
@@ -290,7 +467,21 @@ end
 --   MapResult -- the winning map's name, held up before Loading begins.
 local function runMapPick()
 	mapVotes = {}
+	currentBallot = pickRandomBallot()
 	broadcastMapVotes()
+
+	local candidateIds = {}
+	for _, mapEntry in ipairs(currentBallot) do
+		table.insert(candidateIds, mapEntry.Id)
+	end
+	-- Data attributes set BEFORE the RoundState flip that triggers reading them -- same
+	-- before-the-trigger ordering as RoundMapTitle/RoundEndReason elsewhere in this file.
+	-- RoundMapPickToken (not just the candidates string) exists because two different rounds could
+	-- randomly land on the identical ballot+order, and GetAttributeChangedSignal isn't guaranteed
+	-- to fire on a byte-identical SetAttribute -- same reasoning as RoundMapTitleToken.
+	Workspace:SetAttribute("RoundMapPickCandidates", table.concat(candidateIds, ","))
+	Workspace:SetAttribute("RoundMapPickToken", (Workspace:GetAttribute("RoundMapPickToken") or 0) + 1)
+
 	local votingEndsAt = Workspace:GetServerTimeNow() + RoundConfig.MapPickSeconds
 	local votingMinEndsAt = Workspace:GetServerTimeNow() + RoundConfig.MapVoteMinSeconds
 	Workspace:SetAttribute("RoundMapPickEndsAt", votingEndsAt)
@@ -344,6 +535,8 @@ local function beginRound()
 	Workspace:SetAttribute("RoundGoal", currentMap.Goal)
 
 	roundContributions = {}
+	roundCoinsEarned = {}
+	roundCoinDeltas = {}
 	resetPlayersForRound()
 
 	-- Both find the map's children directly (no WaitForChild timeout) since it's guaranteed
@@ -359,10 +552,37 @@ local function beginRound()
 	task.wait(RoundConfig.LoadingDelaySeconds)
 
 	local ground = map1:WaitForChild(currentMap.GroundName)
-	fadeTeleport(ground, true)
+
+	-- Snapshot of who's actually playing this round -- excludes anyone marked AFK. SetAFK's handler
+	-- allows toggling right up until this exact line (see its own comment in Start()), so this is
+	-- deliberately taken as late as possible, immediately before the teleport below.
+	local participants = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		if not player:GetAttribute("IsAFK") then
+			table.insert(participants, player)
+		end
+	end
+
+	-- Nobody's actually playing this round -- everyone connected is AFK (or nobody's connected at
+	-- all, though runIntermission already guards against that case). Undo the reveal/spawn that
+	-- already happened above and bail straight back to Intermission instead of running a full
+	-- Loading/Countdown/Active/Results cycle -- complete with a translated map and 10,000 leaves --
+	-- for a round literally nobody will experience.
+	if #participants == 0 then
+		LeafSpawner.StopYardRound()
+		SackSystem.StopYardRound()
+		translateMapParts(map1, -RoundConfig.MapAwayOffset)
+		map1.Parent = ServerStorage
+		Workspace:SetAttribute("ActiveMapFolderName", nil)
+		Workspace:SetAttribute("RoundGoal", nil)
+		setState("Intermission")
+		return
+	end
+
+	fadeTeleport(ground, true, participants)
 
 	setState("Countdown")
-	freezePlayers(true)
+	freezePlayers(true, participants)
 
 	-- RoundMapTitle/RoundMapTitleEndsAt are set BEFORE the token bump: the client's trigger for the
 	-- title flash is the token changing, and it reads RoundMapTitle synchronously the instant it
@@ -379,7 +599,7 @@ local function beginRound()
 	-- Countdown hits zero here -- players are released immediately ("GO!" means go), but the
 	-- RoundState itself (and therefore the countdown label showing "GO!") stays put for a bit
 	-- longer so it actually reads as a moment, not a single-frame flicker.
-	freezePlayers(false)
+	freezePlayers(false, participants)
 	task.wait(RoundConfig.GoHoldSeconds)
 
 	setState("Active")
@@ -390,10 +610,23 @@ local function beginRound()
 	-- see forceEndRequested/ForceEndRound below). Polled rather than event-driven since this is the
 	-- only place that cares about the combination of all three conditions together.
 	--
-	-- Also ends early (as a Timer end) if everyone disconnects mid-round -- without this, an
-	-- abandoned round used to just sit there for the full RoundDurationSeconds (240s default) with
-	-- leaves still spawning and their movement loops still ticking, for nobody. Checked every poll
-	-- (0.5s), so it catches an empty round quickly rather than waiting out the timer.
+	-- Also ends early (as a Timer end) once none of THIS round's actual participants are still
+	-- connected -- without this, an abandoned round used to just sit there for the full
+	-- RoundDurationSeconds (240s default) with leaves still spawning and their movement loops still
+	-- ticking, for nobody. Deliberately checks `participants` still in Players:GetPlayers(), NOT
+	-- Players:GetPlayers() being empty -- an AFK player can stay connected in the Lobby the entire
+	-- time (that's the whole point of the feature), which would otherwise mask a round every real
+	-- participant has already left/disconnected from as "still has someone in the server". Checked
+	-- every poll (0.5s), so it catches an empty round quickly rather than waiting out the timer.
+	local function anyParticipantStillConnected()
+		for _, participant in ipairs(participants) do
+			if participant.Parent == Players then
+				return true
+			end
+		end
+		return false
+	end
+
 	local endReason = "Timer"
 	while state == "Active" do
 		local progress = Workspace:GetAttribute("CleanupZoneProgress") or 0
@@ -406,7 +639,7 @@ local function beginRound()
 			endReason = "Timer"
 			break
 		end
-		if #Players:GetPlayers() == 0 then
+		if not anyParticipantStillConnected() then
 			endReason = "Timer"
 			break
 		end
@@ -416,6 +649,13 @@ local function beginRound()
 		end
 		task.wait(0.5)
 	end
+
+	-- Read fresh (not the while loop's own local `progress`, out of scope here) -- safe to read
+	-- after the loop regardless of which condition broke it, since nothing but a delivery can move
+	-- this attribute and StopYardRound below doesn't touch it. Clamped to 1 -- a delivery landing in
+	-- the ~0.5s gap between the loop's last poll and here could in principle push it a hair past 1.
+	local finalProgress = math.min(Workspace:GetAttribute("CleanupZoneProgress") or 0, 1)
+	applyResultsRewards(endReason, finalProgress)
 
 	-- Stop the round's mechanics the instant it's over, not after the whole Results phase -- leaves
 	-- stop spawning and existing ones are cleared, and SackSystem drops its cleanup-zone reference,
@@ -438,16 +678,18 @@ local function beginRound()
 
 	task.wait(RoundConfig.ResultsDurationSeconds)
 
-	endRound()
+	endRound(participants)
 end
 
-function endRound()
+function endRound(participants)
 	local map1 = Workspace:FindFirstChild(currentMap.WorkspaceFolderName)
 
 	local startingLobby = Workspace:WaitForChild("StartingLobby", 15)
 	local spawnPlatform = startingLobby and startingLobby:WaitForChild("SpawnPlatform", 15)
 	if spawnPlatform then
-		fadeTeleport(spawnPlatform, false)
+		-- Same `participants` snapshot from beginRound -- an AFK player never left the Lobby in the
+		-- first place, so there's nothing to bring back for them.
+		fadeTeleport(spawnPlatform, false, participants)
 	end
 
 	if map1 then
@@ -458,6 +700,18 @@ function endRound()
 	Workspace:SetAttribute("RoundGoal", nil)
 
 	setState("Intermission")
+end
+
+-- Called from init.server.luau's LeafSpawner.OnLeafDelivered listener, right alongside
+-- MoneySystem.AddCoins -- that's the one place the coins-per-leaf formula (perks/multipliers
+-- included) actually lives, so this just mirrors whatever was really awarded rather than
+-- recomputing the formula a second time here. Purely additive bookkeeping; never touches a
+-- player's actual balance itself (see applyResultsRewards for where roundCoinsEarned gets turned
+-- into a bonus/penalty).
+function RoundSystem.RecordCoinsEarned(player, amount)
+	if player and amount and amount > 0 then
+		roundCoinsEarned[player] = (roundCoinsEarned[player] or 0) + amount
+	end
 end
 
 -- Testing-only escape hatch (see AdminCommands.luau's ":finishround") -- skips straight to Results
@@ -497,6 +751,10 @@ function RoundSystem.Start()
 	mapVoteUpdateRemote.Name = "MapVoteUpdate"
 	mapVoteUpdateRemote.Parent = remotes
 
+	local setAFKRemote = remotes:FindFirstChild("SetAFK") or Instance.new("RemoteEvent")
+	setAFKRemote.Name = "SetAFK"
+	setAFKRemote.Parent = remotes
+
 	-- InActiveRound defaults to false for every player -- explicitly set (not just left nil, though
 	-- nil already reads falsy client-side) so it's always present for debugging/introspection, and
 	-- so a player who joins mid-round has an unambiguous "not part of this one" signal from the
@@ -509,14 +767,75 @@ function RoundSystem.Start()
 		initPlayerRoundAttribute(player)
 	end
 
-	-- Only counted during MapPick, and only for a real MapConfig entry -- a stale/late vote fired
-	-- right as the phase ends (or a bogus id) is silently dropped rather than corrupting the tally.
+	-- IntermissionActive: false the instant a player connects, true only once their character has
+	-- actually finished loading in (CharacterAdded) -- a just-joined player shouldn't count toward
+	-- "there's someone here" for Intermission purposes (see countActiveIntermissionPlayers) while
+	-- they're still loading, or Intermission could start counting down for someone who isn't
+	-- actually ready to be teleported into a round yet. Only listens for the FIRST CharacterAdded --
+	-- once a player has genuinely loaded in, later respawns (death, admin teleport, etc.) shouldn't
+	-- flip this back to false.
+	local function initPlayerIntermissionState(player)
+		player:SetAttribute("IntermissionActive", false)
+		if player.Character then
+			player:SetAttribute("IntermissionActive", true)
+			return
+		end
+		local connection
+		connection = player.CharacterAdded:Connect(function()
+			if player.Parent then
+				player:SetAttribute("IntermissionActive", true)
+			end
+			connection:Disconnect()
+		end)
+	end
+	Players.PlayerAdded:Connect(initPlayerIntermissionState)
+	for _, player in ipairs(Players:GetPlayers()) do
+		initPlayerIntermissionState(player)
+	end
+
+	-- IsAFK: default false for every player, same explicit-not-just-nil reasoning as
+	-- InActiveRound above. See the attribute doc block up top for what true actually does.
+	local function initPlayerAFKState(player)
+		player:SetAttribute("IsAFK", false)
+	end
+	Players.PlayerAdded:Connect(initPlayerAFKState)
+	for _, player in ipairs(Players:GetPlayers()) do
+		initPlayerAFKState(player)
+	end
+
+	-- Only honored while the player is still physically standing in the Lobby -- which includes
+	-- Loading, not just the states before it: the map is being revealed/built 10,000 studs away
+	-- during Loading (RoundConfig.MapAwayOffset), but nobody's actually been teleported there yet,
+	-- so the player is still in the Lobby the whole time. Only locked out once beginRound actually
+	-- snapshots `participants` right before the real teleport (a few lines before fadeTeleport is
+	-- called) -- a toggle after THAT instant wouldn't change anything for the round already
+	-- underway. A rejected toggle simply leaves IsAFK unchanged; the client reads the attribute back
+	-- rather than assuming its own request succeeded.
+	local LOBBY_STATES = { Intermission = true, MapPick = true, MapTally = true, MapResult = true, Loading = true }
+	setAFKRemote.OnServerEvent:Connect(function(player, wantsAFK)
+		if not LOBBY_STATES[state] then
+			return
+		end
+		wantsAFK = wantsAFK == true
+		player:SetAttribute("IsAFK", wantsAFK)
+		-- Going AFK mid-vote drops any vote already cast -- sitting this round out means not having
+		-- a say in which map everyone else plays it on.
+		if wantsAFK and state == "MapPick" and mapVotes[player] then
+			mapVotes[player] = nil
+			broadcastMapVotes()
+		end
+	end)
+
+	-- Only counted during MapPick, only for a map actually in this round's ballot, and never for an
+	-- AFK player (they're sitting this round out, see IsAFK above) -- any of those, a stale/late
+	-- vote fired right as the phase ends, or a map that didn't make this round's randomly-sampled
+	-- ballot, is silently dropped rather than corrupting the tally.
 	mapVoteRemote.OnServerEvent:Connect(function(player, mapId)
-		if state ~= "MapPick" then
+		if state ~= "MapPick" or player:GetAttribute("IsAFK") then
 			return
 		end
 		local validMap = false
-		for _, mapEntry in ipairs(MapConfig) do
+		for _, mapEntry in ipairs(currentBallot) do
 			if mapEntry.Id == mapId then
 				validMap = true
 				break

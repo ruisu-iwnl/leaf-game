@@ -118,29 +118,61 @@ function RoundUI.Start()
 			return backdrop, PanelMotion.new(panel, backdrop), titleLabel, subtitleLabel
 		end
 
+		-- Shared "top-center status" text -- plain transparent background, FredokaOne + black
+		-- stroke, no pill/background box (distinct from createInfoCard's cream cards above, which
+		-- have real title+subtitle content and, for MapPick, buttons). Used for every plain
+		-- single-line status message pinned to the top-center slot: the Loading label and the
+		-- NotInRound pill (which itself covers both "Round in Progress" and "Round ending..." --
+		-- same widget, different text depending on state). These used to be two different designs
+		-- (Loading was plain text; NotInRound was a dark rounded pill with a white stroke) -- now
+		-- both share this one builder so they read as the same kind of status message.
+		local function createStatusLabel(textSize)
+			local backdrop = Instance.new("Frame")
+			backdrop.Name = "Backdrop"
+			backdrop.Active = false
+			backdrop.AnchorPoint = Vector2.new(0.5, 0)
+			backdrop.Position = UDim2.new(0.5, 0, 0, 24)
+			backdrop.Size = UDim2.new(0, 280, 0, 52)
+			backdrop.BackgroundTransparency = 1
+			backdrop.Visible = false
+			backdrop.Parent = screenGui
+
+			local label = Instance.new("TextLabel")
+			label.Name = "Label"
+			label.Size = UDim2.new(1, 0, 1, 0)
+			label.BackgroundTransparency = 1
+			label.Font = Enum.Font.FredokaOne
+			label.TextSize = textSize
+			label.TextColor3 = Color3.fromRGB(255, 240, 220)
+			label.Text = ""
+			label.Parent = backdrop
+
+			local stroke = Instance.new("UIStroke")
+			stroke.Color = Color3.new(0, 0, 0)
+			stroke.Transparency = 0.4
+			stroke.Thickness = 2
+			stroke.Parent = label
+
+			return backdrop, PanelMotion.new(label, backdrop), label
+		end
+
 		-- Shown during Intermission -- a live "Starting in Ns..." countdown to the next round.
 		local _, intermissionMotion, intermissionTitle, intermissionSubtitle = createInfoCard()
 		intermissionTitle.Text = "Next Round"
 
-		-- Shown during Loading (map revealing/building, before anyone's teleported in).
-		local loadingLabel = Instance.new("TextLabel")
-		loadingLabel.Name = "LoadingLabel"
-		loadingLabel.AnchorPoint = Vector2.new(0.5, 0)
-		loadingLabel.Position = UDim2.new(0.5, 0, 0, 24)
-		loadingLabel.Size = UDim2.new(0, 280, 0, 52)
-		loadingLabel.BackgroundTransparency = 1
-		loadingLabel.Font = Enum.Font.FredokaOne
-		loadingLabel.TextSize = 26
-		loadingLabel.TextColor3 = Color3.fromRGB(255, 240, 220)
-		loadingLabel.Text = "Loading map..."
-		loadingLabel.Visible = false
-		loadingLabel.Parent = screenGui
+		-- Shown instead of the Intermission/MapPick cards whenever the local player is currently
+		-- marked AFK (AFKUI.luau's toggle, RoundSystem.luau's IsAFK attribute) -- they're sitting
+		-- this round out, so neither "Starting in Ns..." nor a vote panel they can't use applies to
+		-- them. Covers every pre-round Lobby phase (Intermission/MapPick/MapTally/MapResult); once
+		-- Loading actually begins they get the existing NotInRound pill instead (see below), same as
+		-- any other non-participant.
+		local _, afkMotion, afkTitle, afkSubtitle = createInfoCard()
+		afkTitle.Text = "You're AFK"
+		afkSubtitle.Text = "Toggle off to join the next round!"
 
-		local loadingStroke = Instance.new("UIStroke")
-		loadingStroke.Color = Color3.new(0, 0, 0)
-		loadingStroke.Transparency = 0.4
-		loadingStroke.Thickness = 2
-		loadingStroke.Parent = loadingLabel
+		-- Shown during Loading (map revealing/building, before anyone's teleported in).
+		local _, loadingMotion, loadingLabel = createStatusLabel(26)
+		loadingLabel.Text = "Loading map..."
 
 		-- Big "3... 2... 1... GO" number, dead center -- shown once the numeric countdown phase
 		-- actually starts (after the map-title flash below has already played). Wrapped in its own
@@ -215,39 +247,10 @@ function RoundUI.Start()
 		-- -- false for anyone who joined after this round's players were already teleported onto the
 		-- map). Covers Countdown/Active/Results, mutually exclusive with the timer pill/countdown
 		-- number/results banner+leaderboard, which are all gated to inRound-only elsewhere in this
-		-- file -- a non-participant just gets this one plain status pill instead of any of that.
-		local notInRoundBackdrop = Instance.new("Frame")
-		notInRoundBackdrop.Name = "NotInRoundBackdrop"
-		notInRoundBackdrop.Active = false
-		notInRoundBackdrop.AnchorPoint = Vector2.new(0.5, 0)
-		notInRoundBackdrop.Position = UDim2.new(0.5, 0, 0, 24)
-		notInRoundBackdrop.Size = UDim2.new(0, 220, 0, 44)
-		notInRoundBackdrop.BackgroundTransparency = 1
-		notInRoundBackdrop.Visible = false
-		notInRoundBackdrop.Parent = screenGui
-
-		local notInRoundLabel = Instance.new("TextLabel")
-		notInRoundLabel.Name = "NotInRoundLabel"
-		notInRoundLabel.Size = UDim2.new(1, 0, 1, 0)
-		notInRoundLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
-		notInRoundLabel.BackgroundTransparency = 0.25
-		notInRoundLabel.Font = Enum.Font.FredokaOne
-		notInRoundLabel.TextSize = 20
-		notInRoundLabel.TextColor3 = Color3.fromRGB(255, 240, 220)
-		notInRoundLabel.Text = ""
-		notInRoundLabel.Parent = notInRoundBackdrop
-
-		local notInRoundCorner = Instance.new("UICorner")
-		notInRoundCorner.CornerRadius = UDim.new(0, 10)
-		notInRoundCorner.Parent = notInRoundLabel
-
-		local notInRoundStroke = Instance.new("UIStroke")
-		notInRoundStroke.Color = Color3.new(1, 1, 1)
-		notInRoundStroke.Transparency = 0.75
-		notInRoundStroke.Thickness = 1.25
-		notInRoundStroke.Parent = notInRoundLabel
-
-		local notInRoundMotion = PanelMotion.new(notInRoundLabel, notInRoundBackdrop)
+		-- file -- a non-participant just gets this one plain status message instead of any of that.
+		-- Same createStatusLabel design as the Loading label above (used to be its own separate dark
+		-- pill design with a white stroke -- now unified).
+		local _, notInRoundMotion, notInRoundLabel = createStatusLabel(20)
 
 		-- One shared big centered "flash" text -- reused for the pre-countdown map title ("THE
 		-- YARD"), the Results-entry banner ("GOAL REACHED!"/"TIME'S UP!"), the MapTally pause
@@ -293,28 +296,31 @@ function RoundUI.Start()
 		local flashMotion = PanelMotion.new(flashLabel, flashBackdrop)
 
 		-- Shown during MapPick, dead center -- a REAL vote, not a passive announcement: one compact
-		-- row per MapConfig entry (name/difficulty on the left, a Vote button + live count on the
-		-- right) built once from the shared MapConfig module (client already has it, no server
-		-- round-trip needed to know what's votable). Clicking fires SubmitMapVote even with only one
-		-- map/one player on the roster, so the phase always reads as an actual choice being made,
-		-- never skipped.
+		-- row per ballot slot (name/difficulty on the left, a Vote button + live count on the
+		-- right). Clicking fires SubmitMapVote even with only one map/one player on the roster, so
+		-- the phase always reads as an actual choice being made, never skipped.
 		-- Cream card background, same CARD_COLOR/CARD_STROKE/TITLE_COLOR/DESCRIPTION_COLOR theme as
 		-- MapProgressUI, so this reads as a real panel you interact with -- not the flashy
 		-- transparent big-text treatment used for the countdown/tally/result announcements, which
 		-- doesn't suit something with buttons on it. The Vote button itself still reuses the old
 		-- Start button's green-pill look.
 		--
-		-- Rows previously stacked name/info/button/count vertically (~118px each) inside a
-		-- ScrollingFrame -- with MapConfig now capped at 3 real+mock entries (see its own comment on
-		-- why), that's no longer needed: rows are a compact horizontal layout (~64px each) in a
-		-- plain (non-scrolling) list, sized so all of them are always visible at once, no scrollbar.
-		-- The card's width is Scale-based with a UISizeConstraint clamp (300-380px) instead of a flat
-		-- pixel width, so it fits narrow mobile screens without overflowing edge-to-edge.
+		-- Rows are a compact horizontal layout (~64px each) in a plain (non-scrolling) list, sized
+		-- so all of them are always visible at once, no scrollbar. The card's width is Scale-based
+		-- with a UISizeConstraint clamp (300-380px) instead of a flat pixel width, so it fits narrow
+		-- mobile screens without overflowing edge-to-edge.
+		--
+		-- BALLOT_SIZE (not #MapConfig) is what the panel is sized/built for -- RoundSystem randomly
+		-- samples RoundConfig.MapPickBallotSize maps out of the full MapConfig pool each round (see
+		-- RoundMapPickCandidates below), so the pool can keep growing past 3 without ever needing
+		-- this panel reworked again: it's always exactly BALLOT_SIZE rows, just re-labeled with
+		-- whichever maps this round's ballot contains.
 		local MAP_VOTE_ROW_HEIGHT = 64
 		local MAP_PICK_HEADER_HEIGHT = 24
 		local CARD_PADDING = 16
 		local ROW_LIST_GAP = 8
-		local mapPickRowListHeight = (#MapConfig * MAP_VOTE_ROW_HEIGHT) + (math.max(#MapConfig - 1, 0) * ROW_LIST_GAP)
+		local BALLOT_SIZE = math.max(1, math.min(RoundConfig.MapPickBallotSize, #MapConfig))
+		local mapPickRowListHeight = (BALLOT_SIZE * MAP_VOTE_ROW_HEIGHT) + (math.max(BALLOT_SIZE - 1, 0) * ROW_LIST_GAP)
 		local mapPickPanelHeight = CARD_PADDING + MAP_PICK_HEADER_HEIGHT + 8 + mapPickRowListHeight + CARD_PADDING
 
 		local mapPickBackdrop = Instance.new("Frame")
@@ -383,8 +389,16 @@ function RoundUI.Start()
 		local VOTE_BUTTON_COLOR = Color3.fromRGB(110, 200, 130)
 		local VOTED_BUTTON_COLOR = Color3.fromRGB(80, 170, 105)
 
-		-- `mapVoteRows[mapEntry.Id]` -> { Button, CountLabel }, so vote-tally updates and the local
-		-- "which one did I pick" highlight can both be applied per row without rescanning children.
+		-- mapById: MapConfig Id -> entry, so a ballot (just a list of Ids from the server) can be
+		-- turned back into DisplayName/Category/RecommendedPlayers without a server round-trip.
+		local mapById = {}
+		for _, mapEntry in ipairs(MapConfig) do
+			mapById[mapEntry.Id] = mapEntry
+		end
+
+		-- `mapVoteRows[mapId]` -> the row slot currently showing that map, so vote-tally updates and
+		-- the local "which one did I pick" highlight can both be applied per row without rescanning
+		-- children. Rebuilt (not recreated) every ballot -- see applyBallot below.
 		local mapVoteRows = {}
 		local myMapVote = nil
 
@@ -400,9 +414,14 @@ function RoundUI.Start()
 			end
 		end
 
-		for index, mapEntry in ipairs(MapConfig) do
+		-- BALLOT_SIZE reusable row slots, built once and re-labeled every round instead of being
+		-- torn down and rebuilt -- a row's Vote button doesn't capture a specific map at creation
+		-- time (it can't, the map it represents changes round to round); it reads whichever mapId
+		-- applyBallot most recently stamped onto its "MapId" attribute at click time instead.
+		local rowSlots = {}
+		for index = 1, BALLOT_SIZE do
 			-- Subtle background per row (barely-tinted, same warm family as CARD_COLOR/CARD_STROKE)
-			-- so 3 compact rows still read as distinct candidates rather than running together.
+			-- so compact rows still read as distinct candidates rather than running together.
 			local row = Instance.new("Frame")
 			row.Name = "Row" .. index
 			row.LayoutOrder = index
@@ -417,8 +436,8 @@ function RoundUI.Start()
 			rowCorner.Parent = row
 
 			-- Left: map name + difficulty/players, stacked and left-aligned. Right: Vote button +
-			-- live count, stacked and right-aligned -- a horizontal split instead of the old
-			-- vertical stack is what keeps each row short enough for 3 to fit without scrolling.
+			-- live count, stacked and right-aligned -- a horizontal split instead of a vertical stack
+			-- is what keeps each row short enough for all of them to fit without scrolling.
 			local nameLabel = Instance.new("TextLabel")
 			nameLabel.Name = "MapName"
 			nameLabel.Position = UDim2.new(0, 12, 0, 8)
@@ -429,7 +448,7 @@ function RoundUI.Start()
 			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 			nameLabel.TextColor3 = TITLE_COLOR
 			nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-			nameLabel.Text = mapEntry.DisplayName
+			nameLabel.Text = ""
 			nameLabel.ZIndex = 27
 			nameLabel.Parent = row
 
@@ -443,7 +462,7 @@ function RoundUI.Start()
 			infoLabel.TextXAlignment = Enum.TextXAlignment.Left
 			infoLabel.TextWrapped = true
 			infoLabel.TextColor3 = DESCRIPTION_COLOR
-			infoLabel.Text = string.format("%s · %s players", mapEntry.Category or "", mapEntry.RecommendedPlayers or "")
+			infoLabel.Text = ""
 			infoLabel.ZIndex = 27
 			infoLabel.Parent = row
 
@@ -487,14 +506,54 @@ function RoundUI.Start()
 			countLabel.ZIndex = 27
 			countLabel.Parent = row
 
-			mapVoteRows[mapEntry.Id] = { Button = voteButton, CountLabel = countLabel }
-
 			voteButton.Activated:Connect(function()
-				mapVoteRemote:FireServer(mapEntry.Id)
-				myMapVote = mapEntry.Id
+				local mapId = voteButton:GetAttribute("MapId")
+				if not mapId then
+					return
+				end
+				mapVoteRemote:FireServer(mapId)
+				myMapVote = mapId
 				refreshMapVoteButtons()
 			end)
+
+			rowSlots[index] = { Row = row, NameLabel = nameLabel, InfoLabel = infoLabel, Button = voteButton, CountLabel = countLabel }
 		end
+
+		-- Reads RoundMapPickCandidates (comma-separated MapConfig Ids, set fresh every MapPick
+		-- phase by RoundSystem's pickRandomBallot) and re-labels the fixed row slots above to match
+		-- -- this is what actually makes the panel show a different random subset/order each round
+		-- instead of the same fixed list every time.
+		local function applyBallot()
+			local candidatesAttr = Workspace:GetAttribute("RoundMapPickCandidates") or ""
+			mapVoteRows = {}
+			local index = 0
+			for id in string.gmatch(candidatesAttr, "[^,]+") do
+				index += 1
+				local slot = rowSlots[index]
+				if not slot then
+					break
+				end
+				local mapEntry = mapById[id]
+				if mapEntry then
+					slot.NameLabel.Text = mapEntry.DisplayName
+					slot.InfoLabel.Text = string.format("%s · %s players", mapEntry.Category or "", mapEntry.RecommendedPlayers or "")
+					slot.CountLabel.Text = "0 votes"
+					slot.Row.Visible = true
+					slot.Button:SetAttribute("MapId", id)
+					mapVoteRows[id] = slot
+				end
+			end
+			-- A ballot smaller than BALLOT_SIZE (only possible if MapConfig itself has fewer entries
+			-- than RoundConfig.MapPickBallotSize) hides any leftover unlabeled slots instead of
+			-- showing an empty row.
+			for i = index + 1, BALLOT_SIZE do
+				rowSlots[i].Row.Visible = false
+			end
+			refreshMapVoteButtons()
+		end
+
+		Workspace:GetAttributeChangedSignal("RoundMapPickToken"):Connect(applyBallot)
+		applyBallot()
 
 		mapVoteUpdateRemote.OnClientEvent:Connect(function(counts)
 			for id, row in pairs(mapVoteRows) do
@@ -527,11 +586,24 @@ function RoundUI.Start()
 		-- only ever fires on a real change, but this stays correct even if that ever isn't true.
 		local intermissionCardShown = false
 		local mapPickCardShown = false
+		local afkCardShown = false
+		local loadingShown = false
 
 		local function applyState(roundState)
-			loadingLabel.Visible = roundState == "Loading"
+			local isAFK = player:GetAttribute("IsAFK") == true
 
-			local showIntermission = roundState == "Intermission"
+			-- Not shown to an AFK player -- they get the AFK card instead (see showAfkCard below),
+			-- since "Loading map..." would misleadingly suggest they're about to be part of it.
+			local showLoading = roundState == "Loading" and not isAFK
+			if showLoading and not loadingShown then
+				loadingShown = true
+				loadingMotion.Show()
+			elseif not showLoading and loadingShown then
+				loadingShown = false
+				loadingMotion.Hide()
+			end
+
+			local showIntermission = roundState == "Intermission" and not isAFK
 			if showIntermission and not intermissionCardShown then
 				intermissionCardShown = true
 				intermissionMotion.Show()
@@ -540,7 +612,7 @@ function RoundUI.Start()
 				intermissionMotion.Hide()
 			end
 
-			local showMapPick = roundState == "MapPick"
+			local showMapPick = roundState == "MapPick" and not isAFK
 			if showMapPick and not mapPickCardShown then
 				mapPickCardShown = true
 				-- Fresh vote every phase -- a vote from a previous round (or a stale local click)
@@ -554,9 +626,34 @@ function RoundUI.Start()
 				mapPickCardShown = false
 				mapPickMotion.Hide()
 			end
+
+			-- Includes Loading -- the player hasn't actually been teleported anywhere during it (see
+			-- RoundSystem.luau's IsAFK doc comment), same reasoning AFKUI.luau's toggle-allowed
+			-- window uses, so the AFK card should still cover them right up until Countdown.
+			local showAfkCard = isAFK and (
+				roundState == "Intermission"
+				or roundState == "MapPick"
+				or roundState == "MapTally"
+				or roundState == "MapResult"
+				or roundState == "Loading"
+			)
+			if showAfkCard and not afkCardShown then
+				afkCardShown = true
+				afkMotion.Show()
+			elseif not showAfkCard and afkCardShown then
+				afkCardShown = false
+				afkMotion.Hide()
+			end
 		end
 
 		Workspace:GetAttributeChangedSignal("RoundState"):Connect(function()
+			applyState(Workspace:GetAttribute("RoundState"))
+		end)
+		-- IsAFK can flip without RoundState changing at all (toggling the icon while sitting in
+		-- Intermission, say) -- re-run the same state logic off the current RoundState so the
+		-- Intermission/MapPick/AFK cards swap immediately instead of waiting for the next RoundState
+		-- signal.
+		player:GetAttributeChangedSignal("IsAFK"):Connect(function()
 			applyState(Workspace:GetAttribute("RoundState"))
 		end)
 		applyState(Workspace:GetAttribute("RoundState") or "Intermission")
@@ -718,12 +815,16 @@ function RoundUI.Start()
 
 			-- The Intermission card's Show()/Hide() is edge-triggered in applyState above (fires once
 			-- on the RoundState change) -- this just keeps its subtitle text ticking down while it's
-			-- up, same server-clock-driven pattern as the countdown/timer above.
+			-- up, same server-clock-driven pattern as the countdown/timer above. RoundIntermissionEndsAt
+			-- stays nil (see RoundSystem.runIntermission) until at least one player is actually active,
+			-- so there's a real "nothing to count down to yet" state to show here, not just a blank.
 			if roundState == "Intermission" then
 				local endsAt = Workspace:GetAttribute("RoundIntermissionEndsAt")
 				if endsAt then
 					local remaining = math.max(math.ceil(endsAt - Workspace:GetServerTimeNow()), 0)
 					intermissionSubtitle.Text = string.format("Starting in %ds...", remaining)
+				else
+					intermissionSubtitle.Text = "Waiting for players..."
 				end
 			end
 		end)

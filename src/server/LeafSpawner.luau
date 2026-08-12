@@ -56,6 +56,7 @@ local zoneCycleCount = 0
 local yardFallingTarget = 0
 local yardGroundTarget = 0
 local yardGoal = 0
+local yardAvoidRegions = {}
 local fallingLeaves = {} -- part -> state, only leaves CURRENTLY falling (for the blower's mid-air redirect)
 local restingLeaves = {} -- leaf -> { baseX, baseZ, restY, yaw, disturbing }
 local lastPlayerPositions = {} -- player -> Vector3, used to gate disturbance on actual movement
@@ -80,21 +81,21 @@ function LeafSpawner.OnLeafDelivered(callback)
 	table.insert(deliveryListeners, callback)
 end
 
--- `LeafConfig.AvoidRegions`' Center values were authored back when the yard's LeafSpawnArea sat at
--- world (0, 0.15, 0) -- effectively already an offset FROM spawnArea rather than a true absolute
--- coordinate, just written as one. Reading them relative to spawnArea's own (live) Position, instead
--- of as literal world coordinates, keeps today's behavior identical while making it survive
--- RoundSystem translating the whole map away from the Lobby each round (see
--- RoundConfig.MapAwayOffset) -- the region moves with the map instead of staying pinned to
--- old-world-origin coordinates nothing occupies anymore.
--- Lobby leaves (zone ~= "Yard") never intersect these regions -- they're yard-specific obstacles
--- (the house/fence footprint), not anything in the Lobby's own layout.
+-- Each map's own MapConfig entry now owns its AvoidRegions (set into yardAvoidRegions by
+-- StartYardRound below) -- these are obstacle footprints (a building, a sign post) specific to
+-- that map's layout, not a game-wide constant. Center values are authored as offsets FROM
+-- spawnArea's own (live) Position rather than literal world coordinates, so a region moves with
+-- its map instead of staying pinned to wherever the map happened to sit when authored -- keeps
+-- working under RoundSystem translating the whole map away from the Lobby each round (see
+-- RoundConfig.MapAwayOffset).
+-- Lobby leaves (zone ~= "Yard") never intersect these regions -- they're the active round map's
+-- own obstacles, not anything in the Lobby's own layout.
 local function isInAvoidRegion(x, z, zone)
 	if zone ~= "Yard" or not spawnArea then
 		return false
 	end
 	local originX, originZ = spawnArea.Position.X, spawnArea.Position.Z
-	for _, region in pairs(LeafConfig.AvoidRegions) do
+	for _, region in pairs(yardAvoidRegions) do
 		local halfX = region.Size.X / 2
 		local halfZ = region.Size.Z / 2
 		local centerX = originX + region.Center.X
@@ -879,8 +880,12 @@ local function runWindDisturbanceLoop()
 
 				if movedDistance > LeafConfig.WindMinMoveDistance then
 					local nearbyParts = Workspace:GetPartBoundsInRadius(position, LeafConfig.WindDisturbRadius, overlapParams)
-					for _, part in ipairs(nearbyParts) do
-						triggerDisturbance(part, position, player)
+					-- Same cap as ApplyBlow/ApplyRake (see LeafConfig.MaxDisturbedPerCall) -- WindDisturbRadius
+					-- is small (footstep-range) so this rarely matters in practice, but an extremely
+					-- dense pile underfoot shouldn't be able to bypass the cap just because it's the
+					-- passive footstep path instead of an active tool.
+					for i = 1, math.min(#nearbyParts, LeafConfig.MaxDisturbedPerCall) do
+						triggerDisturbance(nearbyParts[i], position, player)
 					end
 				end
 			end
@@ -903,6 +908,12 @@ function LeafSpawner.ApplyBlow(player, origin, direction, blowConfig)
 	local cosHalfAngle = math.cos(math.rad(blowConfig.BlowConeAngleDegrees / 2))
 	local range = blowConfig.BlowRange
 
+	-- Collect qualifying leaves first, trigger second -- lets a huge dense pile caught in a
+	-- wide/close cone be capped to LeafConfig.MaxDisturbedPerCall (closest first) instead of
+	-- firing blowRestingLeaf/startGlide for every single one in this same server tick (see
+	-- MaxDisturbedPerCall's own comment for why that matters). Sort is skipped entirely when under
+	-- the cap -- the common case (a handful of leaves in the cone), not the big-pile one.
+	local candidates = {}
 	for leaf, rest in pairs(restingLeaves) do
 		if not rest.disturbing then
 			local toLeafX = rest.baseX - origin.X
@@ -911,10 +922,19 @@ function LeafSpawner.ApplyBlow(player, origin, direction, blowConfig)
 			if distance > 0.05 and distance <= range then
 				local dot = (toLeafX * direction.X + toLeafZ * direction.Z) / distance
 				if distance <= blowConfig.BlowCloseRadius or dot >= cosHalfAngle then
-					blowRestingLeaf(leaf, rest, direction, blowConfig, player)
+					table.insert(candidates, { Leaf = leaf, Rest = rest, Distance = distance })
 				end
 			end
 		end
+	end
+	if #candidates > LeafConfig.MaxDisturbedPerCall then
+		table.sort(candidates, function(a, b)
+			return a.Distance < b.Distance
+		end)
+	end
+	for i = 1, math.min(#candidates, LeafConfig.MaxDisturbedPerCall) do
+		local candidate = candidates[i]
+		blowRestingLeaf(candidate.Leaf, candidate.Rest, direction, blowConfig, player)
 	end
 
 	for leaf, state in pairs(fallingLeaves) do
@@ -953,6 +973,8 @@ function LeafSpawner.ApplyRake(player, origin, direction, rakeConfig)
 	local cosHalfAngle = math.cos(math.rad(rakeConfig.RakeConeAngleDegrees / 2))
 	local range = rakeConfig.RakeRange
 
+	-- Same collect-then-cap approach as ApplyBlow, same reason (see LeafConfig.MaxDisturbedPerCall).
+	local candidates = {}
 	for leaf, rest in pairs(restingLeaves) do
 		if not rest.disturbing then
 			local toLeafX = rest.baseX - origin.X
@@ -961,10 +983,19 @@ function LeafSpawner.ApplyRake(player, origin, direction, rakeConfig)
 			if distance > 0.05 and distance <= range then
 				local dot = (toLeafX * direction.X + toLeafZ * direction.Z) / distance
 				if distance <= rakeConfig.RakeCloseRadius or dot >= cosHalfAngle then
-					pullRestingLeaf(leaf, rest, origin, rakeConfig, player)
+					table.insert(candidates, { Leaf = leaf, Rest = rest, Distance = distance })
 				end
 			end
 		end
+	end
+	if #candidates > LeafConfig.MaxDisturbedPerCall then
+		table.sort(candidates, function(a, b)
+			return a.Distance < b.Distance
+		end)
+	end
+	for i = 1, math.min(#candidates, LeafConfig.MaxDisturbedPerCall) do
+		local candidate = candidates[i]
+		pullRestingLeaf(candidate.Leaf, candidate.Rest, origin, rakeConfig, player)
 	end
 
 	for leaf, state in pairs(fallingLeaves) do
@@ -1132,6 +1163,7 @@ function LeafSpawner.StartYardRound(map1, mapEntry)
 	yardFallingTarget = mapEntry.FallingLeafCount
 	yardGroundTarget = mapEntry.GroundLeafCount
 	yardGoal = mapEntry.Goal
+	yardAvoidRegions = mapEntry.AvoidRegions or {}
 
 	yardRoundActive = true
 	zoneCycleCount = 0

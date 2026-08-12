@@ -59,6 +59,31 @@ function MoneySystem.SpendCoins(player, amount)
 	return true
 end
 
+-- Deducts up to `amount` Coins, clamped so the balance never goes negative -- unlike SpendCoins,
+-- this never "fails": a penalty (see RoundSystem.applyResultsRewards) should always apply, just
+-- capped at whatever the player actually still has. Returns the amount ACTUALLY deducted, which
+-- can be less than requested if the player already spent this round's earnings on something before
+-- the penalty was applied.
+function MoneySystem.DeductCoins(player, amount)
+	if not player or not player.Parent then
+		return 0
+	end
+	amount = math.floor(amount)
+	if amount <= 0 then
+		return 0
+	end
+
+	local leaderstats = player:FindFirstChild("leaderstats")
+	local coins = leaderstats and leaderstats:FindFirstChild("Coins")
+	if not coins then
+		return 0
+	end
+
+	local actual = math.min(amount, coins.Value)
+	coins.Value -= actual
+	return actual
+end
+
 -- Sets Coins to an exact value (clamped to non-negative) rather than adding -- used by admin
 -- commands (e.g. wiping a player's balance for testing), not by normal gameplay rewards.
 function MoneySystem.SetCoins(player, amount)

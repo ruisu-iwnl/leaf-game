@@ -2,8 +2,9 @@ return {
 	-- How long the Lobby sits idle in Intermission before the next round automatically begins
 	-- picking a map -- replaces the old manual "Start Round" button entirely; the loop just runs on
 	-- its own now (RoundSystem.Start()'s runRoundLoop). RoundUI shows a live "Starting in Ns..."
-	-- card during this window (RoundIntermissionEndsAt).
-	IntermissionSeconds = 10,
+	-- card during this window (RoundIntermissionEndsAt). This timer doesn't even start counting
+	-- down until at least one loaded-in player is present -- see RoundSystem.runIntermission.
+	IntermissionSeconds = 30,
 
 	-- Map vote pacing -- was one flat 6s window that felt instant (especially solo, where voting
 	-- could end the very moment you clicked). Now three separate beats:
@@ -24,6 +25,14 @@ return {
 	MapTallySeconds = 3,
 	MapResultSeconds = 4.5,
 
+	-- How many maps get shown on the vote panel each round -- RoundSystem randomly samples this
+	-- many entries out of MapConfig every MapPick phase (shuffled order too), instead of always
+	-- showing every map. With exactly this many real maps today it just randomizes row order; the
+	-- point is that adding a 4th/5th map later doesn't require reworking the panel's fixed 3-row
+	-- mobile-friendly layout (see RoundUI.luau) -- it's still always exactly this many rows, just a
+	-- random subset of a bigger pool.
+	MapPickBallotSize = 3,
+
 	-- Brief pause after Map1 is revealed and players are teleported in, before the countdown
 	-- starts -- purely a pacing beat so "Loading" reads as a real step, not an instant flicker.
 	LoadingDelaySeconds = 2,
@@ -42,13 +51,20 @@ return {
 	-- spawning up to the map's own budget throughout (MapConfig.luau's FallingLeafCount/
 	-- GroundLeafCount) -- this is just how long players get to work on that map's Goal, also in
 	-- MapConfig now (not here -- it's a per-map difficulty knob, not a global).
-	RoundDurationSeconds = 240,
+	RoundDurationSeconds = 600, -- 10:00
 
 	-- How long the client's full-screen fade holds solid black for a Lobby<->map transition (one
 	-- way -- the same duration is used again for the fade back in). Covers both the Loading->
 	-- Countdown teleport onto the map and the Results->Intermission teleport back to the Lobby, so
 	-- neither ever reads as an instant jump-cut.
 	FadeSeconds = 0.4,
+
+	-- Max time RoundSystem.streamPlayersIn waits (per player, in parallel) for
+	-- Player:RequestStreamAroundAsync to finish loading the destination region in before fading the
+	-- screen back in -- see leaf.rbxlx's Workspace.StreamingEnabled. A generous-but-bounded window:
+	-- long enough for a normal streamed-in region on a laggy connection, short enough that one
+	-- stuck/slow client can't hang everyone else's transition indefinitely.
+	StreamAroundTimeoutSeconds = 2,
 
 	-- How long the map's name flashes big and centered before the numeric countdown starts, once
 	-- players have already faded in on the map.
@@ -65,6 +81,20 @@ return {
 	-- RoundSystem (delays firing the results remote by this long) and RoundUI (how long it holds the
 	-- banner) so the two can never drift out of sync with each other.
 	ResultsBannerHoldSeconds = 2.2,
+
+	-- Risk/reward for how the round actually ended -- read by both RoundSystem
+	-- (RoundSystem.applyResultsRewards, the actual Coins math) and RoundResultsUI (which
+	-- compliment/scold message to show, using the exact same threshold so the message and the
+	-- Coins change can never disagree about how the round went):
+	--   ResultsGoalBonusPercent      : fraction of a player's OWN round-earned Coins added as a
+	--                                  bonus when the goal is reached before the timer.
+	--   ResultsGoodProgressThreshold : cleanup-progress fraction (0-1) at/above which a Timer-ended
+	--                                  round (goal NOT reached) still gets complimented with no
+	--                                  penalty, instead of scolded with a deduction. Below this,
+	--                                  the deduction is (1 - progress) of round-earned Coins -- the
+	--                                  worse the shortfall, the bigger the cut.
+	ResultsGoalBonusPercent = 0.2,
+	ResultsGoodProgressThreshold = 0.8,
 
 	-- Every BasePart under the active round's map folder gets pushed by this vector when the map is
 	-- revealed (and pulled back by the negated vector right before it's hidden again) -- with every

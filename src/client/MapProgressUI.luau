@@ -61,11 +61,22 @@ function MapProgressUI.Start()
 		backdrop.Name = "Backdrop"
 		backdrop.Active = false
 		backdrop.AnchorPoint = Vector2.new(0, 0.5)
-		backdrop.Position = UDim2.new(0, 24, 0.5, 0)
-		backdrop.Size = UDim2.new(0, 260, 0, 92)
+		backdrop.Position = UDim2.new(0, 12, 0.5, 0)
+		-- Deliberately small on BOTH ends of the clamp (not just a lower floor under an unchanged
+		-- desktop-sized ceiling) -- an earlier pass only added a MinSize floor under the old 260x92
+		-- ceiling, but on a real mobile device the scale component still resolved close to that
+		-- ceiling, so it barely shrank at all (see the screenshot report this fixes). This is a
+		-- genuinely smaller design at every size, roughly a quarter the area of the original,
+		-- not just a smaller mobile-only variant of the same design.
+		backdrop.Size = UDim2.new(0.22, 0, 0.065, 0)
 		backdrop.BackgroundTransparency = 1
 		backdrop.Visible = false
 		backdrop.Parent = screenGui
+
+		local backdropSizeConstraint = Instance.new("UISizeConstraint")
+		backdropSizeConstraint.MinSize = Vector2.new(140, 48)
+		backdropSizeConstraint.MaxSize = Vector2.new(188, 58)
+		backdropSizeConstraint.Parent = backdrop
 
 		local panel = Instance.new("Frame")
 		panel.Name = "Panel"
@@ -75,32 +86,33 @@ function MapProgressUI.Start()
 		panel.Parent = backdrop
 
 		local panelCorner = Instance.new("UICorner")
-		panelCorner.CornerRadius = UDim.new(0, 14)
+		panelCorner.CornerRadius = UDim.new(0, 9)
 		panelCorner.Parent = panel
 
 		local panelStroke = Instance.new("UIStroke")
 		panelStroke.Color = CARD_STROKE
 		panelStroke.Transparency = 0.2
-		panelStroke.Thickness = 1.5
+		panelStroke.Thickness = 1
 		panelStroke.Parent = panel
 
 		local mapNameLabel = Instance.new("TextLabel")
 		mapNameLabel.Name = "MapName"
-		mapNameLabel.Position = UDim2.new(0, 16, 0, 10)
-		mapNameLabel.Size = UDim2.new(1, -32, 0, 22)
+		mapNameLabel.Position = UDim2.new(0, 8, 0, 5)
+		mapNameLabel.Size = UDim2.new(1, -16, 0, 14)
 		mapNameLabel.BackgroundTransparency = 1
 		mapNameLabel.Font = Enum.Font.FredokaOne
-		mapNameLabel.TextSize = 18
+		mapNameLabel.TextSize = 12
 		mapNameLabel.TextXAlignment = Enum.TextXAlignment.Left
 		mapNameLabel.TextColor3 = TITLE_COLOR
+		mapNameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 		mapNameLabel.Text = ""
 		mapNameLabel.Parent = panel
 
 		-- Thin pill track/fill, percentage right-aligned inside it.
 		local track = Instance.new("Frame")
 		track.Name = "Track"
-		track.Position = UDim2.new(0, 16, 0, 40)
-		track.Size = UDim2.new(1, -32, 0, 16)
+		track.Position = UDim2.new(0, 8, 0, 21)
+		track.Size = UDim2.new(1, -16, 0, 8)
 		track.BackgroundColor3 = TRACK_COLOR
 		track.BorderSizePixel = 0
 		track.ClipsDescendants = true
@@ -132,11 +144,11 @@ function MapProgressUI.Start()
 		local percentLabel = Instance.new("TextLabel")
 		percentLabel.Name = "PercentLabel"
 		percentLabel.AnchorPoint = Vector2.new(1, 0.5)
-		percentLabel.Position = UDim2.new(1, -6, 0.5, 0)
-		percentLabel.Size = UDim2.new(0, 46, 0.9, 0)
+		percentLabel.Position = UDim2.new(1, -4, 0.5, 0)
+		percentLabel.Size = UDim2.new(0, 30, 0.9, 0)
 		percentLabel.BackgroundTransparency = 1
 		percentLabel.Font = Enum.Font.FredokaOne
-		percentLabel.TextSize = 13
+		percentLabel.TextSize = 9
 		percentLabel.TextXAlignment = Enum.TextXAlignment.Right
 		percentLabel.TextColor3 = TITLE_COLOR
 		percentLabel.Text = "0%"
@@ -145,13 +157,14 @@ function MapProgressUI.Start()
 
 		local hint = Instance.new("TextLabel")
 		hint.Name = "Hint"
-		hint.Position = UDim2.new(0, 16, 0, 62)
-		hint.Size = UDim2.new(1, -32, 0, 20)
+		hint.Position = UDim2.new(0, 8, 0, 32)
+		hint.Size = UDim2.new(1, -16, 0, 12)
 		hint.BackgroundTransparency = 1
 		hint.Font = Enum.Font.FredokaOne
-		hint.TextSize = 13
+		hint.TextSize = 9
 		hint.TextXAlignment = Enum.TextXAlignment.Left
 		hint.TextColor3 = DESCRIPTION_COLOR
+		hint.TextTruncate = Enum.TextTruncate.AtEnd
 		hint.Text = DEFAULT_HINT_TEXT
 		hint.Parent = panel
 

@@ -83,8 +83,9 @@
     "Workspace": {
       "$properties": {
         "FilteringEnabled": true,
+        "StreamingEnabled": true,
         "PredictiveStreamingMode": {
-          "Enum": 0
+          "Enum": 2
         }
       }
     }

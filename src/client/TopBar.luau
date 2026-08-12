@@ -2,13 +2,13 @@ local Players = game:GetService("Players")
 
 local UILayout = require(script.Parent.UILayout)
 
--- Row 1 of the top-right stack: the settings gear and the Coins readout, built as ONE row so a
--- single UIListLayout reflows them together automatically -- two independently positioned widgets
--- only ever line up correctly for one assumed Coins width, and start overlapping once the number
--- grows past that (large balances, etc.).
+-- Row 1 of the top-right stack: the AFK toggle, the settings gear, and the Coins readout, built as
+-- ONE row so a single UIListLayout reflows them together automatically -- two independently
+-- positioned widgets only ever line up correctly for one assumed Coins width, and start
+-- overlapping once the number grows past that (large balances, etc.).
 --
--- CoinsUI and SettingsUI both call TopBar.Build(); only the first call actually constructs
--- anything, the memoized result is handed back to whichever asks second -- so there's exactly one
+-- CoinsUI, SettingsUI, and AFKUI all call TopBar.Build(); only the first call actually constructs
+-- anything, the memoized result is handed back to whichever asks after -- so there's exactly one
 -- row/ScreenGui no matter which client module happens to start first.
 local TopBar = {}
 
@@ -42,6 +42,45 @@ local function buildGearIcon(button)
 		knobCorner.CornerRadius = UDim.new(1, 0)
 		knobCorner.Parent = knob
 	end
+end
+
+-- Pill-shaped badge reading "AFK", same visual language as the coin icon's circular badge (filled
+-- shape + stroke) rather than a hand-drawn crescent-moon shape -- a true cut-out crescent would need
+-- to match whatever's rendering behind this ScreenGui (the 3D world), which varies constantly and
+-- can't be matched with a flat color. A pill (not a circle, unlike the gear/coin icons) so 3 letters
+-- of text actually fit legibly -- sized to stay within the button's own GearSize footprint so it
+-- never overflows into the neighboring gear icon. AFKUI.luau recolors this frame between an ON
+-- (gold, matches the coin icon), OFF (muted brown, matches the gear icon's resting look), and
+-- disabled (grey, can't toggle mid-round) state -- see its `refreshIcon`.
+local function buildAFKIcon(button)
+	local icon = Instance.new("Frame")
+	icon.Name = "AFKIcon"
+	icon.AnchorPoint = Vector2.new(0.5, 0.5)
+	icon.Position = UDim2.new(0.5, 0, 0.5, 0)
+	icon.Size = UDim2.new(0, UILayout.GearSize, 0, 26)
+	icon.BackgroundColor3 = Color3.fromRGB(90, 58, 36)
+	icon.Parent = button
+
+	local iconCorner = Instance.new("UICorner")
+	iconCorner.CornerRadius = UDim.new(1, 0)
+	iconCorner.Parent = icon
+
+	local iconStroke = Instance.new("UIStroke")
+	iconStroke.Color = Color3.fromRGB(210, 150, 80)
+	iconStroke.Thickness = 2
+	iconStroke.Parent = icon
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.Text = "AFK"
+	label.TextSize = 12
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.Parent = icon
+
+	return icon
 end
 
 local function buildCoinIcon(parent, layoutOrder)
@@ -113,6 +152,18 @@ function TopBar.Build()
 	layout.Padding = UDim.new(0, 14)
 	layout.Parent = row
 
+	-- LayoutOrder 0 -- to the LEFT of the gear (ascending LayoutOrder lays out left-to-right), i.e.
+	-- immediately next to Settings, per the ask.
+	local afkButton = Instance.new("TextButton")
+	afkButton.Name = "AFKButton"
+	afkButton.LayoutOrder = 0
+	afkButton.Size = UDim2.new(0, UILayout.GearSize, 0, UILayout.GearSize)
+	afkButton.BackgroundTransparency = 1
+	afkButton.AutoButtonColor = false
+	afkButton.Text = ""
+	afkButton.Parent = row
+	local afkIcon = buildAFKIcon(afkButton)
+
 	local gearButton = Instance.new("TextButton")
 	gearButton.Name = "GearButton"
 	gearButton.LayoutOrder = 1
@@ -151,6 +202,8 @@ function TopBar.Build()
 	built = {
 		gearButton = gearButton,
 		amountLabel = amountLabel,
+		afkButton = afkButton,
+		afkIcon = afkIcon,
 	}
 	return built
 end

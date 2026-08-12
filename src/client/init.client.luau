@@ -1,5 +1,6 @@
 -- local BlowerConeIndicator = require(script.BlowerConeIndicator)
 local AdminCommandBar = require(script.AdminCommandBar)
+local AFKUI = require(script.AFKUI)
 local AssetPreload = require(script.AssetPreload)
 local BadgeNotificationUI = require(script.BadgeNotificationUI)
 local CameraSetup = require(script.CameraSetup)
@@ -28,6 +29,7 @@ local ToastNotificationUI = require(script.ToastNotificationUI)
 
 -- BlowerConeIndicator.Start() -- cone highlight disabled per request; re-enable by uncommenting
 AdminCommandBar.Start()
+AFKUI.Start()
 AssetPreload.Start()
 BadgeNotificationUI.Start()
 CameraSetup.Start()

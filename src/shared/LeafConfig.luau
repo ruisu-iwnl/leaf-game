@@ -59,6 +59,18 @@ return {
 	GroundSpawnInterval = 0.05,
 	GroundSpawnBatchSize = 10, -- PILES (not individual leaves) spawned per loop tick
 
+	-- Caps how many resting leaves can start a new glide (LeafSpawner.startGlide, ~20 replicated
+	-- Attributes each) in a single ApplyBlow/ApplyRake/wind-disturbance call -- a big dense pile
+	-- caught all at once in a wide/close blower cone (or a rake swing) would otherwise fire
+	-- hundreds of simultaneous motion-starts in one server tick with no limit at all, which is
+	-- exactly the kind of replication burst that reads as a stutter/hitch on a high-latency
+	-- connection (all of it has to arrive and get processed together). ApplyBlow/ApplyRake sort
+	-- candidates by distance and take the closest this many, so the rest simply stay resting until
+	-- the NEXT call (BlowerConfig.BlowInterval later) -- a big pile empties out over a few ticks
+	-- instead of all at once, which reads as a more natural gust anyway, not an obviously-missing
+	-- leaf.
+	MaxDisturbedPerCall = 60,
+
 	-- Resting leaves get shoved a short distance when a player WALKS near, landing at a genuinely
 	-- new spot each time (not springing back) so repeated gusts drift them around over time.
 	-- Gated on actual movement (WindMinMoveDistance per scan tick) so standing still nearby does nothing.
@@ -120,7 +132,8 @@ return {
 	-- ever being placed/pushed there at all. Removed -- the whole point of the blower is to be
 	-- able to blow leaves INTO the cleanup zone. The fence posts themselves are still respected
 	-- via clampTargetForObstacles' raycast (real geometry), just not the open platform/gate area.
-	AvoidRegions = {
-		{ Center = Vector3.new(-32, 0, 20), Size = Vector3.new(18, 0, 16) },
-	},
+	--
+	-- AvoidRegions itself moved to MapConfig.luau (per-map, alongside FallingLeafCount/
+	-- GroundLeafCount/Goal) once a second real map existed -- it's obstacle-footprint data
+	-- (e.g. "don't spawn leaves under this building"), not something every map shares.
 }

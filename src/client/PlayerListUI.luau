@@ -150,9 +150,17 @@ local function newRow(container, player, localPlayer)
 
 	if player ~= localPlayer then
 		row.MouseButton1Click:Connect(function()
-			pcall(function()
+			local ok, err = pcall(function()
 				StarterGui:SetCore("PromptFriendRequest", player)
 			end)
+			if not ok then
+				-- Was silently swallowed before -- if the prompt still doesn't appear with this
+				-- warning also silent, the most likely cause is Studio's own test-server dummy
+				-- players (Team Test / multiple local clients) not being real Roblox accounts, so
+				-- there's no real friend service to prompt against. Test against a real account in
+				-- the published game to confirm.
+				warn(string.format("[PlayerListUI] PromptFriendRequest for %s failed: %s", player.Name, tostring(err)))
+			end
 		end)
 	end
 
