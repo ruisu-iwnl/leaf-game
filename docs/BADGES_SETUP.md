@@ -20,8 +20,8 @@ Same requirement as Game Passes -- Badges belong to a published place.
    in-game popup shows this SAME text from `BadgeConfig.luau`, so keeping them matched avoids
    confusion). Tick each box off as you go -- you don't have to do all 22 in one sitting.
 
-> **On hold:** stopped after Leaf Master -- Roblox rate-limits how many Badges/assets you can
-> create within a 24-hour window. First Sweep through Leaf Master are created; everything below is
+> **On hold:** stopped after Leaf Immortal -- Roblox rate-limits how many Badges/assets you can
+> create within a 24-hour window. First Sweep through Leaf Immortal are created; everything below is
 > paused until that window clears, then just pick back up in the same order.
 
 ### Leaves cleaned (lifetime)
@@ -46,23 +46,23 @@ Same requirement as Game Passes -- Badges belong to a published place.
   - Icon: `docs/badges/LeafMaster.png`
   - Name: `Leaf Master`
   - Description: `Clean 40,000 leaves.`
-- [ ] **Leaf Tycoon**
+- [x] **Leaf Tycoon**
   - Icon: `docs/badges/LeafTycoon.png`
   - Name: `Leaf Tycoon`
   - Description: `Clean 60,000 leaves.`
-- [ ] **Leaf Baron**
+- [x] **Leaf Baron**
   - Icon: `docs/badges/LeafBaron.png`
   - Name: `Leaf Baron`
   - Description: `Clean 80,000 leaves.`
-- [ ] **Leaf Mogul**
+- [x] **Leaf Mogul**
   - Icon: `docs/badges/LeafMogul.png`
   - Name: `Leaf Mogul`
   - Description: `Clean 100,000 leaves.`
-- [ ] **Leaf Dynasty**
+- [x] **Leaf Dynasty**
   - Icon: `docs/badges/LeafDynasty.png`
   - Name: `Leaf Dynasty`
   - Description: `Clean 500,000 leaves.`
-- [ ] **Leaf Immortal**
+- [x] **Leaf Immortal**
   - Icon: `docs/badges/LeafImmortal.png`
   - Name: `Leaf Immortal`
   - Description: `Clean 1,000,000 leaves.`
