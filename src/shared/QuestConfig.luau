@@ -117,6 +117,16 @@ return {
 		Id = "LeafLegend",
 		Name = "Leaf Legend",
 		Description = "A long-term goal for the truly dedicated -- keep blowing, raking, and delivering.",
+		-- Same reasoning as Tutorial's own AnnounceStart = false: this has no GiverNPC and no
+		-- RequiresQuest, so StartEligibleQuests auto-starts it for every player the instant they
+		-- join, unconditionally -- there's no player action or narrative moment behind "starting"
+		-- it, so a toast for that reads as noise, not information. Also the practical fix for it
+		-- re-announcing every single Studio Play/Stop session: Started state only survives a
+		-- rejoin via a real DataStore round-trip (see PlayerQuests.luau), which needs the place
+		-- published at least once -- an unpublished Studio test server has nothing to persist
+		-- across separate Play sessions, so a quest that restarts unconditionally on every join
+		-- would otherwise re-toast every single time regardless. Completion still always announces.
+		AnnounceStart = false,
 		Objectives = {
 			{ Id = "DeliverLeaves", Description = "Deliver 10,000 leaves to any Cleanup Zone.", Type = "DeliverLeaves", Target = 10000 },
 		},
@@ -131,6 +141,10 @@ return {
 		Id = "RoundVeteran",
 		Name = "Round Veteran",
 		Description = "A long-term goal for the truly dedicated -- keep showing up, round after round.",
+		-- Same AnnounceStart = false reasoning as LeafLegend right above -- no giver, unconditional
+		-- auto-start on every join, so silencing the start toast is both the right call narratively
+		-- and what stops it re-announcing on every Studio Play/Stop session.
+		AnnounceStart = false,
 		Objectives = {
 			{ Id = "CompleteRounds", Description = "Finish 25 rounds, any outcome.", Type = "CompleteRounds", Target = 25 },
 		},

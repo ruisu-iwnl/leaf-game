@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local BigLeafPileConfig = require(ReplicatedStorage.Shared.BigLeafPileConfig)
@@ -26,14 +25,12 @@ local roundActive = false
 local activePiles = {}
 
 -- Single reused Part+ParticleEmitters for the kill burst (repositioned per use, same "one shared
--- VFX source" pattern LeafSpawner's own playConsumeVFX already established), plus tuning for the
--- fly-apart-and-fade dissolve every leaf in a killed pile plays before the model is actually
--- destroyed -- see killPile/animateAndDestroy below.
+-- VFX source" pattern LeafSpawner's own playConsumeVFX already established) -- see killPile below.
 local burstVFXPart, burstEmitter, burstFlashEmitter
 
-local KILL_ANIM_DURATION = 0.45
-local KILL_ANIM_OUTWARD_STUDS = 3.5
-local KILL_ANIM_RISE_STUDS = 2.5
+-- Fired once per pile kill (model + center position) so every client can play the fly-apart-and-
+-- fade dissolve locally -- see BigLeafPileEffects.luau (client) and killPile's own comment below.
+local pileKilledRemote
 
 -- Same small-local-copy pattern LeafSpawner/SackSystem already each use for their own spatial
 -- checks, rather than reaching into another module's internals.
@@ -97,38 +94,74 @@ local function pickColor()
 end
 
 -- Densely scatters BigLeafPileConfig.LeafCount individual flat Leaf-shaped parts (same
--- LeafConfig.LeafSize/Colors every other leaf in the game already uses) through a dome-shaped
--- volume -- widest at the base, rounding to a point at the apex, like a real heap -- rather than
--- building one smooth solid shape, so this actually reads as a pile of real leaves up close.
--- Height sampling is biased toward the base (y^2.4) so the pile is dense/solid at the bottom and
--- tapers to a light cap at the top, the way a real pile settles under its own weight. Each leaf
--- gets a random yaw plus a small random pitch/roll jitter (bigger for leaves landing further out
--- toward the loose surface, smaller for ones compressed near the core) so it doesn't read as a
--- perfectly flat stack -- deliberately RANDOM jitter rather than a computed "lean away from
--- center" tilt, since a wrong sign/axis on a directional tilt would look visibly broken and this
--- can't be visually verified before the user tests it in Studio (see CLAUDE.md's own note on past
--- rotation-axis bugs); symmetric random jitter has no "backwards" failure mode.
+-- LeafConfig.LeafSize/Colors every other leaf in the game already uses) through a volume that's
+-- reshaped RANDOMLY for every single pile -- width, how sharply the sides taper (straight/conical
+-- vs a rounded dome vs a pinched bulbous top), a few random lumps around the circumference so the
+-- cross-section is never a perfect circle, and a sideways lean that grows with height (a subtly
+-- toppling look) -- so no two piles ever share the same silhouette. Two things stay true no matter
+-- how the shape randomizes, both load-bearing per the "always tall, never floating" ask:
+--   1. radiusAt() always tapers to an exact point at y == height (see the (1 - heightFraction^p)
+--      term), regardless of taperExponent/lumps, so every pile reaches its full target height --
+--      never a short stub.
+--   2. Height sampling stays heavily biased toward the base (see heightBiasExponent), so the base
+--      is always dense/solid and nothing ever reads as a chunk floating clear of the ground.
+-- Each leaf also gets a random yaw plus a small random pitch/roll jitter (bigger for leaves landing
+-- further out toward the loose surface, smaller for ones compressed near the core) -- deliberately
+-- RANDOM jitter rather than a computed "lean away from center" tilt, since a wrong sign/axis on a
+-- directional tilt would look visibly broken and this can't be visually verified before the user
+-- tests it in Studio (see CLAUDE.md's own note on past rotation-axis bugs); symmetric random jitter
+-- has no "backwards" failure mode.
 -- Returns the model plus the health-bar Frame/BillboardGui so the caller can track/update them.
 local function buildPileModel(x, z)
 	local model = Instance.new("Model")
 	model.Name = "BigLeafPile"
 
 	local height = BigLeafPileConfig.PileHeight
-	local baseRadius = BigLeafPileConfig.PileBaseRadius
 	local leafSize = LeafConfig.LeafSize
 
+	-- Randomized once per pile -- see the function-level comment above for what each knob does and
+	-- why the two "always tall / never floating" guarantees hold regardless of these values.
+	local baseRadius = BigLeafPileConfig.PileBaseRadius * (0.85 + math.random() * 0.35)
+	local taperExponent = 1.3 + math.random() * 2.2
+	local heightBiasExponent = 2.1 + math.random() * 0.8
+	local lumps = {}
+	for i = 1, math.random(2, 4) do
+		lumps[i] = {
+			Frequency = i + 1,
+			Phase = math.random() * math.pi * 2,
+			Amplitude = 0.08 + math.random() * 0.14,
+		}
+	end
+	local leanAngle = math.random() * math.pi * 2
+	-- Kept modest relative to baseRadius so the upper leaves always stay above the base's own
+	-- footprint instead of drifting out past it -- a subtle lean, not a toppled-over pile.
+	local leanAmount = baseRadius * (0.1 + math.random() * 0.35)
+	local leanX, leanZ = math.cos(leanAngle) * leanAmount, math.sin(leanAngle) * leanAmount
+
+	local function radiusAt(heightFraction, angle)
+		local radius = baseRadius * (1 - heightFraction ^ taperExponent) ^ 0.6
+		local lumpMultiplier = 1
+		for _, lump in ipairs(lumps) do
+			lumpMultiplier += lump.Amplitude * math.sin(angle * lump.Frequency + lump.Phase)
+		end
+		return radius * math.max(0.55, lumpMultiplier)
+	end
+
 	for _ = 1, BigLeafPileConfig.LeafCount do
-		local y = height * (math.random() ^ 2.4)
-		local radiusAtY = baseRadius * math.sqrt(math.max(0, 1 - (y / height) ^ 2))
-		-- sqrt(random()) samples uniformly by AREA within the disc at this height, not just by
-		-- radius, so leaves don't over-cluster toward the center of each height slice.
-		local r = radiusAtY * math.sqrt(math.random())
+		local y = height * (math.random() ^ heightBiasExponent)
+		local heightFraction = y / height
 		local angle = math.random() * math.pi * 2
-		local leafX = x + math.cos(angle) * r
-		local leafZ = z + math.sin(angle) * r
+		local radiusAtAngle = radiusAt(heightFraction, angle)
+		-- sqrt(random()) samples uniformly by AREA within this angle's radius, not just by radius,
+		-- so leaves don't over-cluster toward the center of each height slice.
+		local r = radiusAtAngle * math.sqrt(math.random())
+		local centerX = x + leanX * heightFraction
+		local centerZ = z + leanZ * heightFraction
+		local leafX = centerX + math.cos(angle) * r
+		local leafZ = centerZ + math.sin(angle) * r
 		local leafY = groundTop + y
 
-		local edgeFraction = radiusAtY > 0.05 and math.clamp(r / radiusAtY, 0, 1) or 0
+		local edgeFraction = radiusAtAngle > 0.05 and math.clamp(r / radiusAtAngle, 0, 1) or 0
 		local jitterMax = math.rad(15 + edgeFraction * 45)
 		local pitchJitter = (math.random() - 0.5) * 2 * jitterMax
 		local rollJitter = (math.random() - 0.5) * 2 * jitterMax
@@ -181,9 +214,11 @@ local function buildPileModel(x, z)
 		end
 	end
 
-	-- Small invisible anchor at the pile's true center/apex -- not one of the randomly-scattered
+	-- Small invisible anchor at the pile's true (leaning) apex -- not one of the randomly-scattered
 	-- leaves, so the health bar always hovers at a consistent spot regardless of which leaf happened
 	-- to land highest (same "dedicated anchor part" pattern LeafSpawner's own consumeVFXPart uses).
+	-- Follows the same lean offset the leaves themselves drift by at heightFraction == 1, so it sits
+	-- right above the actual tip even on a leaning pile, not floating off to one side of it.
 	local core = Instance.new("Part")
 	core.Name = "Core"
 	core.Size = Vector3.new(0.2, 0.2, 0.2)
@@ -192,7 +227,7 @@ local function buildPileModel(x, z)
 	core.CanCollide = false
 	core.CanQuery = false
 	core.CastShadow = false
-	core.Position = Vector3.new(x, groundTop + height, z)
+	core.Position = Vector3.new(x + leanX, groundTop + height, z + leanZ)
 	core.Parent = model
 	model.PrimaryPart = core
 
@@ -309,52 +344,20 @@ local function playKillBurst(position)
 	burstFlashEmitter:Emit(1)
 end
 
--- Every leaf part in a just-killed pile drifts outward/up while fading out, instead of the whole
--- model just vanishing -- one shared Heartbeat connection drives every leaf in this one pile
--- together (not a separate TweenService tween per leaf, which for ~300 parts is real per-Tween
--- Instance overhead for a one-shot effect that only needs a single driving loop). Only touches
--- Position/Transparency, never rotation -- see buildPileModel's own comment on deliberately
--- avoiding computed directional rotation math that can't be visually verified before a real Studio
--- test; a position-only drift has the same "no wrong-axis failure mode" safety.
-local function animateAndDestroy(model, corePosition)
-	local leafInfos = {}
-	for _, part in ipairs(model:GetChildren()) do
-		if part:IsA("BasePart") and part.Name ~= "Core" then
-			local away = Vector3.new(part.Position.X - corePosition.X, 0, part.Position.Z - corePosition.Z)
-			if away.Magnitude < 0.05 then
-				away = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5)
-			end
-			table.insert(leafInfos, {
-				Part = part,
-				StartPosition = part.Position,
-				AwayDirection = away.Unit,
-			})
-		end
-	end
-
-	local elapsed = 0
-	local connection
-	connection = RunService.Heartbeat:Connect(function(dt)
-		elapsed += dt
-		local t = math.clamp(elapsed / KILL_ANIM_DURATION, 0, 1)
-		local eased = 1 - (1 - t) * (1 - t) -- ease-out, so the burst is fast at first and settles near the end
-		for _, info in ipairs(leafInfos) do
-			local rise = KILL_ANIM_RISE_STUDS * eased * (1 - eased * 0.5)
-			local offset = info.AwayDirection * (KILL_ANIM_OUTWARD_STUDS * eased) + Vector3.new(0, rise, 0)
-			info.Part.Position = info.StartPosition + offset
-			info.Part.Transparency = eased
-		end
-		if t >= 1 then
-			connection:Disconnect()
-			model:Destroy()
-		end
-	end)
-end
-
 -- Pays every player who landed at least one damaging hit -- still-connected check mirrors
 -- RoundSystem's own `participant.Parent == Players` idiom. Position passed to DeliverToZone is the
 -- pile's own spot, so LeafSpawner's own small per-delivery sparkle (one per participant) reads as
 -- coming from right where it died, layered under this module's own bigger burst.
+--
+-- The fly-apart-and-fade dissolve itself is NOT driven here anymore -- an earlier version had this
+-- function write Position/Transparency on every leaf part (up to ~300 per pile) every frame for the
+-- whole animation, and that volume of per-frame server->client replication is exactly what showed
+-- up as real lag in the published game (never exposed in Studio solo testing, which doesn't have
+-- enough concurrent clients/latency to feel it). Now this just fires ONE lightweight event with the
+-- model + its center; BigLeafPileEffects.luau (client) plays the actual animation locally on each
+-- client's own machine, at zero further network cost. The model itself is only destroyed here,
+-- after BigLeafPileConfig.KillAnimDuration (+ a small buffer) -- long enough for even a laggy
+-- client to have received the event and finished watching the dissolve first.
 local function killPile(model, state)
 	activePiles[model] = nil
 	local position = Vector3.new(state.X, state.GroundY, state.Z)
@@ -365,7 +368,15 @@ local function killPile(model, state)
 	end
 	state.Billboard.Enabled = false
 	playKillBurst(position + Vector3.new(0, BigLeafPileConfig.PileHeight * 0.5, 0))
-	animateAndDestroy(model, position)
+
+	if pileKilledRemote then
+		pileKilledRemote:FireAllClients(model, position)
+	end
+	task.delay(BigLeafPileConfig.KillAnimDuration + BigLeafPileConfig.KillAnimDestroyBuffer, function()
+		if model.Parent then
+			model:Destroy()
+		end
+	end)
 end
 
 local function applyDamage(model, state, player)
@@ -491,6 +502,16 @@ function BigLeafPileSystem.Start()
 	pilesFolder = Instance.new("Folder")
 	pilesFolder.Name = "BigLeafPiles"
 	pilesFolder.Parent = Workspace
+
+	local remotes = ReplicatedStorage.Shared:FindFirstChild("Remotes")
+	if not remotes then
+		remotes = Instance.new("Folder")
+		remotes.Name = "Remotes"
+		remotes.Parent = ReplicatedStorage.Shared
+	end
+	pileKilledRemote = remotes:FindFirstChild("BigLeafPileKilled") or Instance.new("RemoteEvent")
+	pileKilledRemote.Name = "BigLeafPileKilled"
+	pileKilledRemote.Parent = remotes
 
 	createBurstVFX()
 end

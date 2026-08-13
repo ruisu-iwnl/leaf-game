@@ -1,8 +1,13 @@
 return {
 	-- Roughly half an R15 rig's standing height (~5.5 studs) -- built entirely out of individual
 	-- flat Leaf-shaped parts (LeafConfig.LeafSize/Colors, the exact same look every other leaf in
-	-- the game already uses) densely scattered through a dome-shaped volume, not one smooth solid
-	-- shape, so it actually reads as a pile of real leaves up close.
+	-- the game already uses) densely scattered through a volume, not one smooth solid shape, so it
+	-- actually reads as a pile of real leaves up close. PileHeight is the ONE value every pile always
+	-- reaches exactly (BigLeafPileSystem.buildPileModel's radiusAt always tapers to a point at this
+	-- height, no matter how the rest of the shape randomizes) -- guarantees every pile reads as tall,
+	-- never a short stub. PileBaseRadius is only a nominal/baseline width -- buildPileModel randomizes
+	-- the actual per-pile width, taper steepness, lumpiness, and lean around it, so no two piles ever
+	-- share the same silhouette.
 	PileHeight = 2.75,
 	PileBaseRadius = 2.6,
 	-- How many individual leaf parts make up one pile -- cheap even at 10 piles/round (well under
@@ -54,4 +59,22 @@ return {
 	TrackColor = Color3.fromRGB(224, 218, 206),
 	TrackStroke = Color3.fromRGB(40, 35, 30),
 	FillColor = Color3.fromRGB(224, 168, 96),
+
+	-- Fly-apart-and-fade dissolve played once a pile dies. Driven entirely CLIENT-SIDE
+	-- (BigLeafPileEffects.luau) for performance -- an earlier version had the SERVER write
+	-- Position/Transparency on every leaf part (up to ~300 per pile) every frame for the whole
+	-- duration, and that volume of per-frame replication to every connected client is exactly what
+	-- showed up as real lag in the published game (Studio solo testing never has enough clients/
+	-- latency to expose it). Now the server only fires ONE event per kill and every client animates
+	-- the same already-replicated model entirely locally -- zero further network cost. Shared here
+	-- (not hardcoded separately in each file) so the server's own destroy-delay (see
+	-- BigLeafPileSystem.killPile) can never drift out of sync with how long the client-side
+	-- animation actually plays.
+	KillAnimDuration = 0.45,
+	KillAnimOutwardStuds = 3.5,
+	KillAnimRiseStuds = 2.5,
+	-- Extra grace period on top of KillAnimDuration before the server actually destroys the model,
+	-- so a client with a bit of latency still has time to receive the event and finish watching the
+	-- dissolve before the instance disappears out from under them.
+	KillAnimDestroyBuffer = 0.15,
 }
