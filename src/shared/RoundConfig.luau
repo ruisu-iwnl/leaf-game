@@ -4,7 +4,7 @@ return {
 	-- its own now (RoundSystem.Start()'s runRoundLoop). RoundUI shows a live "Starting in Ns..."
 	-- card during this window (RoundIntermissionEndsAt). This timer doesn't even start counting
 	-- down until at least one loaded-in player is present -- see RoundSystem.runIntermission.
-	IntermissionSeconds = 30,
+	IntermissionSeconds = 15,
 
 	-- Map vote pacing -- was one flat 6s window that felt instant (especially solo, where voting
 	-- could end the very moment you clicked). Now three separate beats:
@@ -51,7 +51,7 @@ return {
 	-- spawning up to the map's own budget throughout (MapConfig.luau's FallingLeafCount/
 	-- GroundLeafCount) -- this is just how long players get to work on that map's Goal, also in
 	-- MapConfig now (not here -- it's a per-map difficulty knob, not a global).
-	RoundDurationSeconds = 600, -- 10:00
+	RoundDurationSeconds = 300, -- 5:00
 
 	-- How long the client's full-screen fade holds solid black for a Lobby<->map transition (one
 	-- way -- the same duration is used again for the fade back in). Covers both the Loading->

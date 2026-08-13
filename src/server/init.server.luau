@@ -9,6 +9,7 @@ local GamePassPerks = require(script.GamePassPerks)
 local HallOfFameSystem = require(script.HallOfFameSystem)
 local LeafSpawner = require(script.LeafSpawner)
 local LeavesCleanedStat = require(script.LeavesCleanedStat)
+local MainMenuSystem = require(script.MainMenuSystem)
 local MoneyConfig = require(ReplicatedStorage.Shared.MoneyConfig)
 local MoneySystem = require(script.MoneySystem)
 local PlayerSetup = require(script.PlayerSetup)
@@ -24,6 +25,10 @@ local StoreSystem = require(script.StoreSystem)
 local VIPPreferences = require(script.VIPPreferences)
 local WindSystem = require(script.WindSystem)
 
+-- MainMenuSystem first of all -- it sets OnMainMenu on PlayerAdded, which every other
+-- player-facing system (RoundSystem especially) needs to already see as true the instant a player
+-- connects, since CharacterAutoLoads is off and nobody has a character until it fires LoadCharacter().
+MainMenuSystem.Start()
 -- WindSystem first so the WindDirection attribute is already set before the first leaves spawn.
 WindSystem.Start()
 LeafSpawner.Start()

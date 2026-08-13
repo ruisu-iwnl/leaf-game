@@ -390,11 +390,17 @@ end
 
 local TUTORIAL_QUEST_ID = QuestConfig.Tutorial.Id
 
--- true for an explicitly-AFK player, OR a player with the Tutorial quest started but not yet
--- completed -- both are excluded from Intermission's player count, the map vote, and beginRound's
--- `participants` snapshot. See this file's own top attribute-doc block for why Tutorial specifically.
+-- true for an explicitly-AFK player, a player still on the Main Menu (see MainMenuSystem.luau --
+-- OnMainMenu is true from connect until they press Play, since CharacterAutoLoads is off and they
+-- have no character at all until then), OR a player with the Tutorial quest started but not yet
+-- completed -- all three are excluded from Intermission's player count, the map vote, and
+-- beginRound's `participants` snapshot. See this file's own top attribute-doc block for why
+-- Tutorial specifically.
 local function isSittingOutThisRound(player)
 	if player:GetAttribute("IsAFK") then
+		return true
+	end
+	if player:GetAttribute("OnMainMenu") then
 		return true
 	end
 	return player:GetAttribute("QuestStarted_" .. TUTORIAL_QUEST_ID) == true

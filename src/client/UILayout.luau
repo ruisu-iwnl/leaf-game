@@ -25,6 +25,9 @@
 --                  panels in the game (above every other Panel/PanelOverlay/Toast/HUD element).
 --   Admin        : AdminCommandBar only -- a dev tool, deliberately above literally everything
 --                  else so it's usable no matter what other UI happens to be open.
+--   MainMenu     : MainMenuUI only -- the pre-game title/Play screen, above even Admin, since it
+--                  must fully cover the screen before any other system (gameplay or dev tool) has
+--                  anything worth seeing underneath it.
 return {
 	DisplayOrder = {
 		HUD = 0,
@@ -34,6 +37,7 @@ return {
 		Toast = 40,
 		TopPanel = 50,
 		Admin = 100,
+		MainMenu = 200,
 	},
 
 

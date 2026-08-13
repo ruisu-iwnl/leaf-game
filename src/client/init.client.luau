@@ -12,6 +12,7 @@ local InventoryUI = require(script.InventoryUI)
 local ItemPreviewUI = require(script.ItemPreviewUI)
 local LeafCollector = require(script.LeafCollector)
 local LeafRenderer = require(script.LeafRenderer)
+local MainMenuUI = require(script.MainMenuUI)
 local MapProgressUI = require(script.MapProgressUI)
 local MobileControls = require(script.MobileControls)
 local NPCDialogues = require(script.NPCDialogues)
@@ -34,6 +35,10 @@ local TutorialPanelUI = require(script.TutorialPanelUI)
 local VIPColorPickerUI = require(script.VIPColorPickerUI)
 local VIPEffects = require(script.VIPEffects)
 
+-- MainMenuUI must run before anything else touches Workspace.CurrentCamera -- it seizes the
+-- camera (Scriptable, cinematic orbit) the instant this client starts, so there's never a single
+-- frame of the default view before the black cover/menu take over. See MainMenuUI.luau.
+MainMenuUI.Start()
 -- BlowerConeIndicator.Start() -- cone highlight disabled per request; re-enable by uncommenting
 AdminCommandBar.Start()
 AFKUI.Start()
