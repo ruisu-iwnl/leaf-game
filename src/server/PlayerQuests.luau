@@ -17,10 +17,15 @@ local QuestConfig = require(ReplicatedStorage.Shared.QuestConfig)
 -- Nothing here needs a PlayerAdded hook -- an unset Attribute already reads as "not started/not
 -- completed," which is exactly the right default for both a brand-new player and (in an unpublished
 -- Studio session with no DataStore access) a player whose save never loads -- see SaveSystem.luau's
--- own comment on that. Only Completed is persisted (CompletedQuestIds) -- Started is NOT, so a
--- returning player who hasn't finished a quest yet gets it re-started (and, if AnnounceStart isn't
--- false, re-announced) every session until they do. A known, deliberate simplification: building a
--- real persisted "in progress" state isn't worth it before a second quest exists to actually need it.
+-- own comment on that. Both Completed (CompletedQuestIds) AND Started (StartedQuestIds) are
+-- persisted -- SaveSystem restores Started directly via PlayerQuests.StartQuest (the same "call the
+-- plain function directly, never QuestSystem's wrapper" pattern already used for Completed) BEFORE
+-- QuestSystem.StartEligibleQuests runs, so an in-progress quest's Started Attribute is already true
+-- by the time that function checks it -- StartQuest is a no-op for anything already started, so no
+-- "Quest Started" toast re-fires on a rejoin, only on a quest's genuine first-ever start. (Started
+-- used to NOT be persisted at all, which is why that toast used to re-fire every single login for
+-- any not-yet-completed quest with AnnounceStart ~= false -- e.g. the long-term LeafLegend/
+-- RoundVeteran quests, which realistically stay "in progress" for a very long time.)
 local PlayerQuests = {}
 
 local function questAttribute(id)
@@ -88,6 +93,20 @@ function PlayerQuests.GetCompletedQuestIds(player)
 	local ids = {}
 	for id in pairs(QuestConfig) do
 		if PlayerQuests.HasCompleted(player, id) then
+			table.insert(ids, id)
+		end
+	end
+	return ids
+end
+
+-- Same shape as GetCompletedQuestIds, but deliberately excludes anything already completed --
+-- CompletedQuestIds already covers those (and PlayerQuests.CompleteQuest sets Started true as a
+-- side effect of restoring one, see that function), so this only needs to carry genuinely
+-- in-progress quests.
+function PlayerQuests.GetStartedQuestIds(player)
+	local ids = {}
+	for id in pairs(QuestConfig) do
+		if PlayerQuests.HasStarted(player, id) and not PlayerQuests.HasCompleted(player, id) then
 			table.insert(ids, id)
 		end
 	end

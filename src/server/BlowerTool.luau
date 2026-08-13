@@ -4,6 +4,7 @@ local RunService = game:GetService("RunService")
 local StarterPack = game:GetService("StarterPack")
 local Workspace = game:GetService("Workspace")
 
+local BigLeafPileSystem = require(script.Parent.BigLeafPileSystem)
 local BlowerConfig = require(ReplicatedStorage.Shared.BlowerConfig)
 local LeafSpawner = require(script.Parent.LeafSpawner)
 local PlayerUpgrades = require(script.Parent.PlayerUpgrades)
@@ -366,6 +367,42 @@ local function watchTool(tool)
 		end
 	end
 
+	-- "Recess" player-push (see BlowerConfig.PlayerPushSpeed): reuses the exact same cone test
+	-- LeafSpawner.ApplyBlow already runs for leaves (close-radius bubble + angle-from-direction),
+	-- just against other players' HumanoidRootParts instead of leaf parts. Kept self-contained here
+	-- rather than folded into LeafSpawner, since that module has no reason to know players exist.
+	-- Sets (never accumulates) horizontal velocity toward a fixed push speed and leaves Y alone, so
+	-- standing in the cone can't runaway-accelerate and jumping/falling/fall damage are unaffected --
+	-- stepping out of the cone (or the blower stopping) hands control straight back to the Humanoid
+	-- on the very next tick.
+	local function pushNearbyPlayers(selfPlayer, origin, direction, effectiveConfig)
+		local cosHalfAngle = math.cos(math.rad(effectiveConfig.BlowConeAngleDegrees / 2))
+		local range = effectiveConfig.BlowRange
+
+		for _, otherPlayer in ipairs(Players:GetPlayers()) do
+			if otherPlayer ~= selfPlayer then
+				local otherCharacter = otherPlayer.Character
+				local rootPart = otherCharacter and otherCharacter:FindFirstChild("HumanoidRootPart")
+				if rootPart then
+					local toX = rootPart.Position.X - origin.X
+					local toZ = rootPart.Position.Z - origin.Z
+					local distance = math.sqrt(toX * toX + toZ * toZ)
+					if distance > 0.05 and distance <= range then
+						local dot = (toX * direction.X + toZ * direction.Z) / distance
+						if distance <= effectiveConfig.BlowCloseRadius or dot >= cosHalfAngle then
+							local currentVel = rootPart.AssemblyLinearVelocity
+							rootPart.AssemblyLinearVelocity = Vector3.new(
+								direction.X * BlowerConfig.PlayerPushSpeed,
+								currentVel.Y,
+								direction.Z * BlowerConfig.PlayerPushSpeed
+							)
+						end
+					end
+				end
+			end
+		end
+	end
+
 	local function runBlowLoop()
 		while blowing do
 			local origin, direction = getAimOriginDirection(tool, nozzle)
@@ -373,6 +410,8 @@ local function watchTool(tool)
 				local player = Players:GetPlayerFromCharacter(tool.Parent)
 				local effectiveConfig = player and PlayerUpgrades.GetEffectiveConfig(player, TOOL_NAME) or BlowerConfig
 				LeafSpawner.ApplyBlow(player, origin, direction, effectiveConfig)
+				BigLeafPileSystem.ApplyBlow(player, origin, direction, effectiveConfig)
+				pushNearbyPlayers(player, origin, direction, effectiveConfig)
 			end
 			task.wait(BlowerConfig.BlowInterval)
 		end

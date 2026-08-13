@@ -19,8 +19,9 @@ local SackSystem = require(script.Parent.SackSystem)
 -- in the sack UI, not yet turned into a physical sack), every physical sack currently in the
 -- player's Backpack/equipped (as a leaf-count list -- see SackSystem.GetPlayerSackLeafCounts/
 -- RestoreSacks), owned upgrades/perks/cosmetics, the Leaf Patron perk's own two cosmetic
--- preferences (effects on/off, trail color -- see PlayerUpgrades.luau), completed quest ids (see
--- PlayerQuests.luau), in-progress chain-quest objective counts (see QuestObjectives.luau, e.g.
+-- preferences (effects on/off, trail color -- see PlayerUpgrades.luau), completed AND in-progress
+-- (started but not yet completed) quest ids (see PlayerQuests.luau), in-progress chain-quest
+-- objective counts (see QuestObjectives.luau, e.g.
 -- Getting Started II's "3/5 Rake uses"), and today's daily-quest progress/completion (see
 -- DailyQuestSystem.luau -- without this, rejoining mid-day would let a player re-earn an
 -- already-completed daily's reward) across sessions. Areas and season progress will get added here once those systems exist to have
@@ -144,6 +145,17 @@ local function loadPlayerData(player)
 			PlayerQuests.CompleteQuest(player, id)
 		end
 	end
+	-- Restored BEFORE StartEligibleQuests below so an in-progress quest's Started Attribute is
+	-- already true the moment that function checks it -- PlayerQuests.StartQuest is a no-op for
+	-- anything already started, so this is what stops the "Quest Started" toast from re-firing on
+	-- every single rejoin for a long-running quest (e.g. LeafLegend/RoundVeteran) that just hasn't
+	-- been completed yet. Called directly (not through QuestSystem's wrapper), same "call the plain
+	-- function directly when replaying a save" pattern CompletedQuestIds above already uses.
+	if typeof(result.StartedQuestIds) == "table" then
+		for _, id in ipairs(result.StartedQuestIds) do
+			PlayerQuests.StartQuest(player, id)
+		end
+	end
 	-- Chain quests' (e.g. GettingStarted2/3) per-objective progress -- restored before
 	-- StartEligibleQuests below so a returning player's partial progress (e.g. 3/5 Rake uses) is
 	-- already in place the moment the quest itself starts/resumes. Never needs to restore a quest
@@ -192,6 +204,7 @@ local function savePlayerData(player)
 		VIPEffectsEnabled = PlayerUpgrades.IsVIPEffectsEnabled(player),
 		VIPTrailColor = PlayerUpgrades.GetVIPTrailColor(player),
 		CompletedQuestIds = PlayerQuests.GetCompletedQuestIds(player),
+		StartedQuestIds = PlayerQuests.GetStartedQuestIds(player),
 		QuestObjectives = QuestObjectives.GetSaveData(player),
 		DailyQuests = DailyQuestSystem.GetSaveData(player),
 	}

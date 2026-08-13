@@ -6,6 +6,7 @@ local TextChatService = game:GetService("TextChatService")
 local AdminConfig = require(ReplicatedStorage.Shared.AdminConfig)
 local BadgeConfig = require(ReplicatedStorage.Shared.BadgeConfig)
 local BadgeSystem = require(script.Parent.BadgeSystem)
+local BigLeafPileSystem = require(script.Parent.BigLeafPileSystem)
 local CosmeticConfig = require(ReplicatedStorage.Shared.CosmeticConfig)
 local LeafSpawner = require(script.Parent.LeafSpawner)
 local MoneySystem = require(script.Parent.MoneySystem)
@@ -330,6 +331,17 @@ commands.finishround = function(admin)
 		print(string.format("[Admin] %s force-ended the round early (counts as Time's Up)", admin.Name))
 	else
 		warn("[Admin] :finishround only works during an Active round")
+	end
+end
+
+-- Force-kills whichever Big Leaf Pile is nearest the admin's own character, paying out the normal
+-- reward as if they'd blown it down for real -- lets the reward pipeline get tested without waiting
+-- out several seconds of continuous blowing per pile.
+commands.killpile = function(admin)
+	if BigLeafPileSystem.AdminKillNearest(admin) then
+		print(string.format("[Admin] %s force-killed the nearest Big Leaf Pile", admin.Name))
+	else
+		warn("[Admin] :killpile only works during an Active round with at least one pile still alive nearby")
 	end
 end
 

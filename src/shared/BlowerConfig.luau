@@ -66,6 +66,13 @@ return {
 	-- perfectly parallel line.
 	BlowDirectionJitterDegrees = 20,
 
+	-- "Recess" player-push: while blowing, other players caught in the same cone that pushes leaves
+	-- get a small continuous horizontal nudge too -- a soft, harmless wind stagger, not a hit.
+	-- Deliberately fixed (not read through PlayerUpgrades' effective-config scaling) so Wide/Long
+	-- Nozzle upgrades widen the PUSH'S REACH (they widen/extend the shared cone this rides on) but
+	-- never make the push itself stronger -- a maxed-out blower still can't launch someone.
+	PlayerPushSpeed = 14,
+
 	-- Worn backpack unit + straps, same color scheme as the handheld part. Always worn once the
 	-- character spawns (not tied to whether the blower is currently equipped) -- that's intentional,
 	-- matching the original "backpack the player will wear" request.

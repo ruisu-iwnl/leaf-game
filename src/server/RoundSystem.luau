@@ -7,6 +7,7 @@ local MapConfig = require(ReplicatedStorage.Shared.MapConfig)
 local PlayerConfig = require(ReplicatedStorage.Shared.PlayerConfig)
 local QuestConfig = require(ReplicatedStorage.Shared.QuestConfig)
 local RoundConfig = require(ReplicatedStorage.Shared.RoundConfig)
+local BigLeafPileSystem = require(script.Parent.BigLeafPileSystem)
 local DailyQuestSystem = require(script.Parent.DailyQuestSystem)
 local LeafSpawner = require(script.Parent.LeafSpawner)
 local MoneySystem = require(script.Parent.MoneySystem)
@@ -584,6 +585,7 @@ local function beginRound()
 	-- Goal live there now, not in a global config.
 	LeafSpawner.StartYardRound(map1, currentMap)
 	SackSystem.StartYardRound(map1)
+	BigLeafPileSystem.StartYardRound(map1, currentMap)
 
 	-- The map is now fully built (leaves spawned) -- this pacing wait is the actual "loading" beat.
 	-- Players are NOT teleported until it's done, so nobody ever arrives on a map that's still
@@ -610,6 +612,7 @@ local function beginRound()
 	if #participants == 0 then
 		LeafSpawner.StopYardRound()
 		SackSystem.StopYardRound()
+		BigLeafPileSystem.StopYardRound()
 		translateMapParts(map1, -RoundConfig.MapAwayOffset)
 		map1.Parent = ServerStorage
 		Workspace:SetAttribute("ActiveMapFolderName", nil)
@@ -714,6 +717,7 @@ local function beginRound()
 	-- part of a round that's already finished (no more progress, no more coins).
 	LeafSpawner.StopYardRound()
 	SackSystem.StopYardRound()
+	BigLeafPileSystem.StopYardRound()
 
 	-- Announce first (RoundUI's big "GOAL REACHED!"/"TIME'S UP!" flash, triggered by RoundState
 	-- entering Results), hold that on its own, THEN pop the leaderboard -- these used to fire in
