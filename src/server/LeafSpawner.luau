@@ -44,6 +44,7 @@ local lobbyGround
 local lobbyGroundTop
 local lobbyCleanupZone
 local consumeVFXPart
+local deliveryPopupRemote
 local consumeEmitter
 local consumeFlashEmitter
 -- nil = use LeafConfig.GoldenLeafChance normally. Set by the :goldenleaf admin command
@@ -68,6 +69,19 @@ local lastPlayerPositions = {} -- player -> Vector3, used to gate disturbance on
 local started = false
 local deliveryListeners = {}
 
+-- Delivery popup batching -- see ShowDeliveryPopup below. A sustained blow into the zone calls
+-- notifyDelivery (and therefore ShowDeliveryPopup) once per INDIVIDUAL leaf, which on a
+-- thousands-of-leaves map can mean many calls per second per player; without batching that's the
+-- same number of BillboardGuis/Tweens spun up client-side, and the same number of RemoteEvent
+-- fires. These accumulate a player's pending popup and flush it as one combined number on a
+-- short timer instead.
+local POPUP_BATCH_WINDOW_SECONDS = 0.35
+local pendingPopupAmount = {} -- player -> accumulated amount not yet shown
+local pendingPopupPosition = {} -- player -> most recent delivery position this window
+local pendingPopupColor = {} -- player -> most recent (highest-tier) color this window
+local pendingPopupMilestone = {} -- player -> a milestone text to show on the next flush, if any
+local popupFlushScheduled = {} -- player -> true while a flush is already queued
+
 -- Fired whenever leaves land in the cleanup zone with a known delivering player (blown in, raked
 -- in, footstep-nudged in, or a sack drop-off) -- kept as a plain callback list rather than
 -- requiring MoneySystem directly, so this module still doesn't need to know Coins/players exist as
@@ -75,17 +89,79 @@ local deliveryListeners = {}
 -- anywhere in the causal chain) skip this. `bonusCoins` (optional, defaults to 0) is a flat
 -- pre-multiplier amount on top of the normal count-based payout -- today only ever set by
 -- consumeLeaf, for a Golden Leaf (see LeafConfig.luau's own comment).
-local function notifyDelivery(player, count, bonusCoins)
+-- `position` (optional) is where the delivery happened -- a single blown-in leaf and a sack
+-- drop-off both know exactly where they landed, so they pass it through to every listener,
+-- falling back to the CleanupZone's own position if not given. This is also the entire reason a
+-- Big Leaf Pile kill can show its own floating popup for free: BigLeafPileSystem.killPile already
+-- pays each participant through LeafSpawner.DeliverToZone (below), passing the pile's own
+-- position -- one funnel, no second position-tracking path to keep in sync.
+--
+-- Deliberately does NOT fire the delivery popup itself with `count` -- this module stays
+-- decoupled from Coins (see this function's own comment above), so it has no idea what a
+-- delivery was actually worth once upgrades/perks/golden bonuses are folded in. It just hands
+-- position along to listeners; see LeafSpawner.ShowDeliveryPopup below, which
+-- init.server.luau's Coins-awarding listener calls with the real payout amount.
+local function notifyDelivery(player, count, bonusCoins, position)
 	if not player then
 		return
 	end
+	local popupPosition = position or (cleanupZone and cleanupZone.Position)
 	for _, callback in ipairs(deliveryListeners) do
-		callback(player, count, bonusCoins or 0)
+		callback(player, count, bonusCoins or 0, popupPosition)
 	end
 end
 
 function LeafSpawner.OnLeafDelivered(callback)
 	table.insert(deliveryListeners, callback)
+end
+
+local function flushDeliveryPopup(player)
+	popupFlushScheduled[player] = nil
+	local amount = pendingPopupAmount[player]
+	local position = pendingPopupPosition[player]
+	pendingPopupAmount[player] = nil
+	pendingPopupPosition[player] = nil
+	local color = pendingPopupColor[player]
+	local milestone = pendingPopupMilestone[player]
+	pendingPopupColor[player] = nil
+	pendingPopupMilestone[player] = nil
+
+	if deliveryPopupRemote and position and amount and amount > 0 and player.Parent == Players then
+		deliveryPopupRemote:FireClient(player, amount, position, color, milestone)
+	end
+end
+
+-- Floating "+N" popup, sent only to `player`, anchored at `position` -- see
+-- DeliveryPopupEffects.luau (client) for the other half. Public (rather than automatic inside
+-- notifyDelivery above) so the one place that actually knows what a delivery was worth in Coins
+-- -- init.server.luau's OnLeafDelivered listener, after upgrades/perks/golden bonuses AND
+-- DeliveryStreakSystem's multiplier are folded in -- can show that real number instead of this
+-- module guessing at leaf count. `color` (optional, defaults client-side) and `milestone`
+-- (optional, e.g. "Amazing!") come straight from DeliveryStreakSystem.RecordDelivery.
+--
+-- Doesn't fire immediately -- accumulates into that player's pending popup and lets
+-- flushDeliveryPopup send ONE combined number after POPUP_BATCH_WINDOW_SECONDS, so a sustained
+-- blow (many single-leaf deliveries per second) reads as occasional bigger pops instead of a
+-- popup per leaf. The position/color used are whichever were most recent when the window closes;
+-- a milestone reached partway through the window still shows on that flush.
+function LeafSpawner.ShowDeliveryPopup(player, amount, position, color, milestone)
+	if not (player and position and amount and amount > 0) then
+		return
+	end
+
+	pendingPopupAmount[player] = (pendingPopupAmount[player] or 0) + amount
+	pendingPopupPosition[player] = position
+	if color then
+		pendingPopupColor[player] = color
+	end
+	if milestone then
+		pendingPopupMilestone[player] = milestone
+	end
+
+	if not popupFlushScheduled[player] then
+		popupFlushScheduled[player] = true
+		task.delay(POPUP_BATCH_WINDOW_SECONDS, flushDeliveryPopup, player)
+	end
 end
 
 -- Testing hook for :goldenleaf (AdminCommands.luau). `chance` is a plain 0-1 fraction applied to
@@ -288,7 +364,7 @@ local function consumeLeaf(leaf, x, y, z, player)
 	-- No notification/toast for a Golden Leaf -- deliberately silent, per explicit feedback that a
 	-- popup for this felt like overkill. The glow itself (see createLeaf) is the only "you found
 	-- one" signal; the bonus Coins just land in the balance the same way any other delivery's do.
-	notifyDelivery(player, 1, isGolden and LeafConfig.GoldenLeafBonusCoins or 0)
+	notifyDelivery(player, 1, isGolden and LeafConfig.GoldenLeafBonusCoins or 0, Vector3.new(x, y, z))
 	leaf:Destroy()
 end
 
@@ -315,7 +391,7 @@ function LeafSpawner.DeliverToZone(count, position, player)
 	leavesCleanedCount += count
 	Workspace:SetAttribute("LeavesCleaned", leavesCleanedCount)
 	registerZoneProgress(count)
-	notifyDelivery(player, count)
+	notifyDelivery(player, count, nil, position)
 end
 
 -- Lobby counterpart of DeliverToZone, for a physical sack dropped/carried into LobbyCleanupZone --
@@ -1078,6 +1154,24 @@ function LeafSpawner.Start()
 		return
 	end
 	started = true
+
+	local remotes = ReplicatedStorage.Shared:FindFirstChild("Remotes")
+	if not remotes then
+		remotes = Instance.new("Folder")
+		remotes.Name = "Remotes"
+		remotes.Parent = ReplicatedStorage.Shared
+	end
+	deliveryPopupRemote = remotes:FindFirstChild("LeafDeliveryPopup") or Instance.new("RemoteEvent")
+	deliveryPopupRemote.Name = "LeafDeliveryPopup"
+	deliveryPopupRemote.Parent = remotes
+
+	Players.PlayerRemoving:Connect(function(player)
+		pendingPopupAmount[player] = nil
+		pendingPopupPosition[player] = nil
+		pendingPopupColor[player] = nil
+		pendingPopupMilestone[player] = nil
+		popupFlushScheduled[player] = nil
+	end)
 
 	-- init.server.luau calls every system's Start() sequentially on one thread -- LeafSpawner runs
 	-- 2nd, so anything blocking here used to stall the other ~15 systems after it (SaveSystem's

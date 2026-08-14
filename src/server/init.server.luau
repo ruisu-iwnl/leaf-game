@@ -6,6 +6,7 @@ local BigLeafPileSystem = require(script.BigLeafPileSystem)
 local BlowerTool = require(script.BlowerTool)
 local DailyQuestSystem = require(script.DailyQuestSystem)
 local DayNightCycle = require(script.DayNightCycle)
+local DeliveryStreakSystem = require(script.DeliveryStreakSystem)
 local GamePassPerks = require(script.GamePassPerks)
 local HallOfFameSystem = require(script.HallOfFameSystem)
 local LeafSpawner = require(script.LeafSpawner)
@@ -33,6 +34,7 @@ MainMenuSystem.Start()
 -- WindSystem first so the WindDirection attribute is already set before the first leaves spawn.
 WindSystem.Start()
 LeafSpawner.Start()
+DeliveryStreakSystem.Start()
 BigLeafPileSystem.Start()
 SackSystem.Start()
 PlayerSetup.Start()
@@ -70,14 +72,21 @@ AdminCommands.Start()
 -- only ever set by LeafSpawner.consumeLeaf for a Golden Leaf (see LeafConfig.luau). Scaled by the
 -- SAME GetCoinsMultiplier every other leaf already gets here, so a Golden Leaf's bonus is just as
 -- affected by DoubleGrab etc. as the rest of a delivery -- no separate multiplier logic needed.
-LeafSpawner.OnLeafDelivered(function(player, count, bonusCoins)
+LeafSpawner.OnLeafDelivered(function(player, count, bonusCoins, position)
 	local perLeafCoins = MoneyConfig.CoinsPerLeaf * PlayerUpgrades.GetCoinsMultiplier(player)
 	local goldenBonus = (bonusCoins or 0) * PlayerUpgrades.GetCoinsMultiplier(player)
-	local coins = count * perLeafCoins + PlayerUpgrades.RollLuckyBonus(player, perLeafCoins, count) + goldenBonus
+	local baseCoins = count * perLeafCoins + PlayerUpgrades.RollLuckyBonus(player, perLeafCoins, count) + goldenBonus
+	-- Delivery Streak (see DeliveryStreakSystem.luau) stacks on top of every other multiplier
+	-- above -- applied last, right before payout, same as every other bonus in this listener.
+	local streakMultiplier, popupColor, milestone = DeliveryStreakSystem.RecordDelivery(player)
+	local coins = baseCoins * streakMultiplier
 	MoneySystem.AddCoins(player, coins)
 	RoundSystem.RecordCoinsEarned(player, coins)
 	LeavesCleanedStat.Add(player, count)
 	BadgeSystem.CheckDeliveryMilestones(player)
 	DailyQuestSystem.RecordProgress(player, "DeliverLeaves", count)
 	QuestObjectives.RecordProgress(player, "DeliverLeaves", count)
+	-- Same math.floor MoneySystem.AddCoins itself applies, so the popup always matches exactly
+	-- what actually lands in the balance (never shows a fractional Coins amount).
+	LeafSpawner.ShowDeliveryPopup(player, math.floor(coins), position, popupColor, milestone)
 end)
