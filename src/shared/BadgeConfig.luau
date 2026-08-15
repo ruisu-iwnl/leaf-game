@@ -87,14 +87,14 @@ return {
 		Name = "Pocket Change",
 		Description = "Reach 1,000 Coins.",
 		Tier = "Bronze",
-		BadgeId = 0,
+		BadgeId = 4149068188970633,
 	},
 	CoinHoarder = {
 		Id = "CoinHoarder",
 		Name = "Coin Hoarder",
 		Description = "Reach 25,000 Coins.",
 		Tier = "Gold",
-		BadgeId = 0,
+		BadgeId = 484854671302075,
 	},
 	-- Same reasoning/ladder shape as the Leaf* extensions above -- CoinsPerLeaf is 1 (see
 	-- MoneyConfig.luau), so these line up on roughly the same scale as the Leaf ladder by default.
@@ -103,42 +103,42 @@ return {
 		Name = "Coin Magnate",
 		Description = "Reach 40,000 Coins.",
 		Tier = "Silver",
-		BadgeId = 0,
+		BadgeId = 4365311111144099,
 	},
 	CoinBaron = {
 		Id = "CoinBaron",
 		Name = "Coin Baron",
 		Description = "Reach 60,000 Coins.",
 		Tier = "Silver",
-		BadgeId = 0,
+		BadgeId = 802982505066428,
 	},
 	CoinTycoon = {
 		Id = "CoinTycoon",
 		Name = "Coin Tycoon",
 		Description = "Reach 80,000 Coins.",
 		Tier = "Gold",
-		BadgeId = 0,
+		BadgeId = 3359724448435698,
 	},
 	CoinMogul = {
 		Id = "CoinMogul",
 		Name = "Coin Mogul",
 		Description = "Reach 100,000 Coins.",
 		Tier = "Gold",
-		BadgeId = 0,
+		BadgeId = 370934028919633,
 	},
 	CoinDynasty = {
 		Id = "CoinDynasty",
 		Name = "Coin Dynasty",
 		Description = "Reach 500,000 Coins.",
 		Tier = "Platinum",
-		BadgeId = 0,
+		BadgeId = 2885993920452880,
 	},
 	CoinImmortal = {
 		Id = "CoinImmortal",
 		Name = "Coin Immortal",
 		Description = "Reach 1,000,000 Coins.",
 		Tier = "Platinum",
-		BadgeId = 0,
+		BadgeId = 1955848720128050,
 	},
 
 	Upgraded = {
@@ -146,14 +146,14 @@ return {
 		Name = "Upgraded",
 		Description = "Buy your first upgrade.",
 		Tier = "Bronze",
-		BadgeId = 0,
+		BadgeId = 3657817993636453,
 	},
 	FullyLoaded = {
 		Id = "FullyLoaded",
 		Name = "Fully Loaded",
 		Description = "Own every upgrade.",
 		Tier = "Silver",
-		BadgeId = 0,
+		BadgeId = 2147202474230529,
 	},
 
 	Fashionista = {
