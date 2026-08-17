@@ -7,6 +7,7 @@ local MapConfig = require(ReplicatedStorage.Shared.MapConfig)
 local PlayerConfig = require(ReplicatedStorage.Shared.PlayerConfig)
 local QuestConfig = require(ReplicatedStorage.Shared.QuestConfig)
 local RoundConfig = require(ReplicatedStorage.Shared.RoundConfig)
+local BadgeSystem = require(script.Parent.BadgeSystem)
 local BigLeafPileSystem = require(script.Parent.BigLeafPileSystem)
 local DailyQuestSystem = require(script.Parent.DailyQuestSystem)
 local LeafSpawner = require(script.Parent.LeafSpawner)
@@ -709,6 +710,14 @@ local function beginRound()
 			DailyQuestSystem.RecordProgress(participant, "CompleteRounds", 1)
 			QuestObjectives.RecordProgress(participant, "CompleteRounds", 1)
 		end
+	end
+
+	-- "Mr. Solo Dolo!" badge (BadgeConfig.luau) -- true only about THIS round's participant count,
+	-- not a persistent stat, so it's checked here directly rather than through a BadgeSystem.Check*
+	-- function. Any map, any goal/timer outcome -- same "showing up counts" spirit as CompleteRounds
+	-- just above.
+	if #participants == 1 and participants[1].Parent == Players then
+		BadgeSystem.Award(participants[1], "MrSoloDolo")
 	end
 
 	-- Stop the round's mechanics the instant it's over, not after the whole Results phase -- leaves

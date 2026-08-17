@@ -161,7 +161,7 @@ return {
 		Name = "Fashionista",
 		Description = "Own your first cosmetic skin.",
 		Tier = "Bronze",
-		BadgeId = 0,
+		BadgeId = 1148299400082241,
 	},
 
 	TwoXGrabber = {
@@ -169,14 +169,14 @@ return {
 		Name = "2X Grabber",
 		Description = "Own the 2X Grab perk.",
 		Tier = "Silver",
-		BadgeId = 0,
+		BadgeId = 4401961921132010,
 	},
 	LuckyLeafOwner = {
 		Id = "LuckyLeafOwner",
 		Name = "Lucky Leaf",
 		Description = "Own the Lucky Leaf perk.",
 		Tier = "Silver",
-		BadgeId = 0,
+		BadgeId = 4438193074745848,
 	},
 	LeafPatronOwner = {
 		Id = "LeafPatronOwner",
@@ -184,5 +184,16 @@ return {
 		Description = "Own the Leaf Patron VIP perk.",
 		Tier = "Gold",
 		BadgeId = 0,
+	},
+
+	-- Fun/novelty badges -- awarded off a one-off event condition true only about a single moment
+	-- (e.g. a specific round's outcome), not a persistent stat re-checked from save data like every
+	-- entry above. See RoundSystem.luau's beginRound for where this one is actually awarded.
+	MrSoloDolo = {
+		Id = "MrSoloDolo",
+		Name = "Mr. Solo Dolo!",
+		Description = "Finish a run only by yourself (any map).",
+		Tier = "Silver",
+		BadgeId = 3221758579367713,
 	},
 }
